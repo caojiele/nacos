@@ -21,15 +21,13 @@ import com.alibaba.nacos.naming.misc.*;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.commons.collections.CollectionUtils;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 /**
- * @author dungu.zpf
+ * @author <a href="mailto:zpf.073@gmail.com">nkorange</a>
  */
 public class DistroMapper {
 
@@ -56,16 +54,12 @@ public class DistroMapper {
     private static Synchronizer synchronizer = new ServerStatusSynchronizer();
 
     static {
-        try {
-            localhostIP = InetAddress.getLocalHost().getHostAddress() + ":" + RunningConfig.getServerPort();
-        } catch (UnknownHostException e) {
-            throw new IllegalStateException("Unable to resolve current host IP");
-        }
+        localhostIP = NetUtils.localServer();
 
         init();
 
         UtilsAndCommons.SERVER_STATUS_EXECUTOR.schedule(new ServerStatusReporter(),
-                60000, TimeUnit.MILLISECONDS);
+            60000, TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -75,12 +69,12 @@ public class DistroMapper {
         List<String> servers = NamingProxy.getServers();
 
         while (servers == null || servers.size() == 0) {
-            Loggers.SRV_LOG.warn("DISTRO-MAPPER", "Server list is empty, sleep 3 seconds and try again.");
+            Loggers.SRV_LOG.warn("[DISTRO-MAPPER] Server list is empty, sleep 3 seconds and try again.");
             try {
                 TimeUnit.SECONDS.sleep(3);
                 servers = NamingProxy.getServers();
             } catch (InterruptedException e) {
-                Loggers.SRV_LOG.warn("DISTRO-MAPPER", "Sleeping thread is interupted, try again.");
+                Loggers.SRV_LOG.warn("[DISTRO-MAPPER] Sleeping thread is interupted, try again.");
             }
         }
 
@@ -114,7 +108,7 @@ public class DistroMapper {
             // site:ip:lastReportTime:weight
             String[] params = config.split("#");
             if (params.length <= 3) {
-                Loggers.SRV_LOG.warn("received malformed distro map data: " + config);
+                Loggers.SRV_LOG.warn("received malformed distro map data: {}", config);
                 continue;
             }
 
@@ -163,10 +157,10 @@ public class DistroMapper {
         float curRatio = (float) newHealthyList.size() / allSiteSrvs.size();
 
         if (AUTO_DISABLED_HEALTH_CHECK
-                && curRatio > Switch.getDistroThreshold()
-                && System.currentTimeMillis() - LAST_HEALTH_SERVER_MILLIS > STABLE_PERIOD) {
-            Loggers.SRV_LOG.info("VIPSRV-DISTRO", "distro threshold restored and " +
-                    "stable now, enable health check. current ratio: " + curRatio);
+            && curRatio > Switch.getDistroThreshold()
+            && System.currentTimeMillis() - LAST_HEALTH_SERVER_MILLIS > STABLE_PERIOD) {
+            Loggers.SRV_LOG.info("[VIPSRV-DISTRO] distro threshold restored and " +
+                "stable now, enable health check. current ratio: {}", curRatio);
 
             Switch.setHeathCheckEnabled(true);
 
@@ -177,8 +171,9 @@ public class DistroMapper {
         if (!CollectionUtils.isEqualCollection(healthyList, newHealthyList)) {
             // for every change disable healthy check for some while
             if (Switch.isHealthCheckEnabled()) {
-                Loggers.SRV_LOG.info("VIPSRV-DISTRO", "healthy server list changed, " +
-                        "disable health check for " + STABLE_PERIOD + "ms from now on, healthList: " + healthyList + ",newHealthyList " + newHealthyList);
+                Loggers.SRV_LOG.info("[VIPSRV-DISTRO] healthy server list changed, " +
+                        "disable health check for {} ms from now on, healthList: {}, newHealthyList {}",
+                    STABLE_PERIOD, healthyList, newHealthyList);
 
                 Switch.setHeathCheckEnabled(false);
                 AUTO_DISABLED_HEALTH_CHECK = true;
@@ -204,7 +199,7 @@ public class DistroMapper {
             // site:ip:lastReportTime:weight
             String[] params = config.split("#");
             if (params.length <= 3) {
-                Loggers.SRV_LOG.warn("received malformed distro map data: " + config);
+                Loggers.SRV_LOG.warn("received malformed distro map data: {}", config);
                 continue;
             }
 
@@ -236,8 +231,8 @@ public class DistroMapper {
 
                 if (serverId.equals(newServerId)) {
                     if (s.alive != server.alive || s.weight != server.weight) {
-                        Loggers.SRV_LOG.warn("server beat out of date, current: " + JSON.toJSONString(server)
-                                + ", last: " + JSON.toJSONString(s));
+                        Loggers.SRV_LOG.warn("server beat out of date, current: {}, last: {}",
+                            JSON.toJSONString(server), JSON.toJSONString(s));
                     }
                     tmpServerList.add(server);
                     continue;
@@ -262,12 +257,20 @@ public class DistroMapper {
         //local site servers
         List<String> allLocalSiteSrvs = new ArrayList<String>();
         for (Server server : servers) {
+
+            if (server.ip.endsWith(":0")) {
+                continue;
+            }
+
             server.adWeight = Switch.getAdWeight(server.ip) == null ? 0 : Switch.getAdWeight(server.ip);
 
             for (int i = 0; i < server.weight + server.adWeight; i++) {
-                allLocalSiteSrvs.add(server.ip);
 
-                if (server.alive) {
+                if (!allLocalSiteSrvs.contains(server.ip)) {
+                    allLocalSiteSrvs.add(server.ip);
+                }
+
+                if (server.alive && !newHealthyList.contains(server.ip)) {
                     newHealthyList.add(server.ip);
                 }
             }
@@ -277,10 +280,10 @@ public class DistroMapper {
         float curRatio = (float) newHealthyList.size() / allLocalSiteSrvs.size();
 
         if (AUTO_DISABLED_HEALTH_CHECK
-                && curRatio > Switch.getDistroThreshold()
-                && System.currentTimeMillis() - LAST_HEALTH_SERVER_MILLIS > STABLE_PERIOD) {
-            Loggers.SRV_LOG.info("VIPSRV-DISTRO", "distro threshold restored and " +
-                    "stable now, enable health check. current ratio: " + curRatio);
+            && curRatio > Switch.getDistroThreshold()
+            && System.currentTimeMillis() - LAST_HEALTH_SERVER_MILLIS > STABLE_PERIOD) {
+            Loggers.SRV_LOG.info("[VIPSRV-DISTRO] distro threshold restored and " +
+                "stable now, enable health check. current ratio: {}", curRatio);
 
             Switch.setHeathCheckEnabled(true);
 
@@ -291,8 +294,8 @@ public class DistroMapper {
         if (!CollectionUtils.isEqualCollection(healthyList, newHealthyList)) {
             // for every change disable healthy check for some while
             if (Switch.isHealthCheckEnabled()) {
-                Loggers.SRV_LOG.info("VIPSRV-DISTRO", "healthy server list changed, " +
-                        "disable health check for " + STABLE_PERIOD + "ms from now on");
+                Loggers.SRV_LOG.info("[VIPSRV-DISTRO] healthy server list changed, " +
+                    "disable health check for {} ms from now on", STABLE_PERIOD);
 
                 Switch.setHeathCheckEnabled(false);
                 AUTO_DISABLED_HEALTH_CHECK = true;
@@ -398,7 +401,7 @@ public class DistroMapper {
         try {
             NamingProxy.reqAPI("distroStatus", params, serverIP, false);
         } catch (Exception e) {
-            Loggers.SRV_LOG.warn("DISTRO-STATUS-CLEAN", "Failed to request to clean server status to " + serverIP, e);
+            Loggers.SRV_LOG.warn("[DISTRO-STATUS-CLEAN] Failed to request to clean server status to " + serverIP, e);
         }
     }
 
@@ -421,6 +424,25 @@ public class DistroMapper {
         public long lastRefTime = 0L;
         public String lastRefTimeStr;
 
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+
+            Server server = (Server) o;
+
+            return ip.equals(server.ip);
+
+        }
+
+        @Override
+        public int hashCode() {
+            return ip.hashCode();
+        }
     }
 
     private static class ServerStatusReporter implements Runnable {
@@ -428,6 +450,11 @@ public class DistroMapper {
         @Override
         public void run() {
             try {
+
+                if (RunningConfig.getServerPort() <= 0) {
+                    return;
+                }
+
                 for (String key : distroConfig.keySet()) {
                     for (Server server : distroConfig.get(key)) {
                         server.alive = System.currentTimeMillis() - server.lastRefTime < Switch.getdistroServerExpiredMillis();
@@ -439,7 +466,7 @@ public class DistroMapper {
                     weight = 1;
                 }
 
-                localhostIP = InetAddress.getLocalHost().getHostAddress() + ":" + RunningConfig.getServerPort();
+                localhostIP = NetUtils.localServer();
 
                 long curTime = System.currentTimeMillis();
                 String status = LOCALHOST_SITE + "#" + localhostIP + "#" + curTime + "#" + weight + "\r\n";
@@ -460,7 +487,7 @@ public class DistroMapper {
                         }
 
                         if (!allServers.contains(localhostIP)) {
-                            Loggers.SRV_LOG.error("NA", "local ip is not in serverlist, ip: " + localhostIP + ", serverlist: " + allServers);
+                            Loggers.SRV_LOG.error("local ip is not in serverlist, ip: {}, serverlist: {}", localhostIP, allServers);
                             return;
                         }
 
@@ -472,7 +499,7 @@ public class DistroMapper {
                     }
                 }
             } catch (Exception e) {
-                Loggers.SRV_LOG.error("SERVER-STATUS", "Exception while sending server status: ", e);
+                Loggers.SRV_LOG.error("[SERVER-STATUS] Exception while sending server status", e);
             } finally {
                 UtilsAndCommons.SERVER_STATUS_EXECUTOR.schedule(this, Switch.getServerStatusSynchronizationPeriodMillis(), TimeUnit.MILLISECONDS);
             }

@@ -16,8 +16,6 @@
 package com.alibaba.nacos.naming.healthcheck;
 
 
-import com.alibaba.nacos.naming.core.Cluster;
-import com.alibaba.nacos.naming.core.Domain;
 import com.alibaba.nacos.naming.core.IpAddress;
 import com.alibaba.nacos.naming.misc.Loggers;
 
@@ -58,22 +56,15 @@ public class HealthCheckStatus {
 
     private static String buildKey(IpAddress ip) {
         try {
-            Cluster cluster = ip.getCluster();
-            Domain domain = cluster.getDom();
 
-            if (domain == null) {
-                Loggers.SRV_LOG.warn("BUILD-KEY", "domain is null, ip: " + ip.toIPAddr());
-                return ip.getDefaultKey();
-            }
-
-            String clusterName = cluster.getName();
-            String dom = domain.getName();
+            String clusterName = ip.getClusterName();
+            String dom = ip.getServiceName();
             String datumKey = ip.getDatumKey();
             return dom + ":"
                     + clusterName + ":"
                     + datumKey;
         } catch (Throwable e) {
-            Loggers.SRV_LOG.error("BUILD-KEY", "Exception while set rt, ip " + ip.toJSON(), e);
+            Loggers.SRV_LOG.error("[BUILD-KEY] Exception while set rt, ip {}, error: {}", ip.toJSON(), e);
         }
 
         return ip.getDefaultKey();

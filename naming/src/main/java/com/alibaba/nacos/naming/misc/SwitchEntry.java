@@ -16,7 +16,7 @@
 package com.alibaba.nacos.naming.misc;
 
 /**
- * @author dungu.zpf
+ * @author <a href="mailto:zpf.073@gmail.com">nkorange</a>
  */
 public class SwitchEntry {
 
@@ -29,6 +29,7 @@ public class SwitchEntry {
     public static final String PUSH_VERSION = "pushVersion";
     public static final String CLIENT_JAVA = "java";
     public static final String CLIENT_C = "c";
+    public static final String CLIENT_GO = "go";
     public static final String CLIENT_PYTHON = "python";
     public static final String CLIENT_TENGINE = "python";
     public static final String TRAFFIC_SCHEDULING_VERSION = "trafficSchedulingVersion";
@@ -37,6 +38,7 @@ public class SwitchEntry {
     public static final String MASTERS = "masters";
     public static final String DISTRO = "distro";
     public static final String CHECK = "check";
+    public static final String DEFAULT_HEALTH_CHECK_MODE = "defaultHealthCheckMode";
     public static final String DOM_STATUS_SYNC_PERIOD = "domStatusSynchronizationPeriodMillis";
     public static final String SERVER_STATUS_SYNC_PERIOD = "serverStatusSynchronizationPeriodMillis";
     public static final String HEALTH_CHECK_TIMES = "healthCheckTimes";

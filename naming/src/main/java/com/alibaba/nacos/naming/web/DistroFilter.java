@@ -19,8 +19,10 @@ import com.alibaba.nacos.naming.core.DistroMapper;
 import com.alibaba.nacos.naming.misc.Loggers;
 import com.alibaba.nacos.naming.misc.Switch;
 import com.alibaba.nacos.naming.misc.UtilsAndCommons;
+import com.alibaba.nacos.naming.raft.RaftCore;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.http.HttpMethod;
 
 import javax.servlet.*;
 import javax.servlet.http.HttpServletRequest;
@@ -32,6 +34,7 @@ import java.util.Map;
  * @author nacos
  */
 public class DistroFilter implements Filter {
+
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {
 
@@ -53,6 +56,19 @@ public class DistroFilter implements Filter {
                     resp.setStatus(entry.getValue());
                     return;
                 }
+            }
+        }
+
+        if (req.getRequestURI().contains(UtilsAndCommons.NACOS_NAMING_INSTANCE_CONTEXT) && !RaftCore.isLeader()) {
+
+            if (HttpMethod.PUT.name().equals(req.getMethod()) && HttpMethod.DELETE.name().equals(req.getMethod())) {
+                String url = "http://" + RaftCore.getLeader().ip + req.getRequestURI() + "?" + req.getQueryString();
+                try {
+                    resp.sendRedirect(url);
+                } catch (Exception ignore) {
+                    Loggers.SRV_LOG.warn("[DISTRO-FILTER] request failed: " + url);
+                }
+                return;
             }
         }
 
@@ -86,7 +102,7 @@ public class DistroFilter implements Filter {
                 try {
                     resp.sendRedirect(url);
                 } catch (Exception ignore) {
-                    Loggers.SRV_LOG.warn("DISTRO-FILTER", "request failed: " + url);
+                    Loggers.SRV_LOG.warn("[DISTRO-FILTER] request failed: " + url);
                 }
             }
         }
@@ -100,11 +116,6 @@ public class DistroFilter implements Filter {
     }
 
     public boolean canDistro(String urlString) {
-
-        if (urlString.startsWith(UtilsAndCommons.NACOS_NAMING_CONTEXT + UtilsAndCommons.API_DOM_SERVE_STATUS)) {
-            return false;
-        }
-
         return urlString.startsWith(UtilsAndCommons.NACOS_NAMING_CONTEXT + UtilsAndCommons.API_IP_FOR_DOM) ||
                 urlString.startsWith(UtilsAndCommons.NACOS_NAMING_CONTEXT + UtilsAndCommons.API_DOM);
     }

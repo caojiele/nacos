@@ -15,23 +15,21 @@
  */
 package com.alibaba.nacos.naming.misc;
 
-import com.alibaba.nacos.common.util.IoUtils;
-import com.alibaba.nacos.common.util.SystemUtil;
+import com.alibaba.nacos.common.util.SystemUtils;
 import com.alibaba.nacos.naming.boot.RunningConfig;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
-import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+
+import static com.alibaba.nacos.common.util.SystemUtils.*;
 
 /**
  * @author nacos
@@ -63,7 +61,7 @@ public class NamingProxy {
     private static String jmenv;
 
     public static String getJmenv() {
-        jmenv = SystemUtil.getSystemEnv("nacos_jmenv_domain");
+        jmenv = SystemUtils.getSystemEnv("nacos_jmenv_domain");
 
         if (StringUtils.isEmpty(jmenv)) {
             jmenv = System.getProperty("com.alibaba.nacos.naming.jmenv", "jmenv.tbsite.net");
@@ -82,7 +80,8 @@ public class NamingProxy {
             if (System.currentTimeMillis() - lastSrvSiteRefreshTime > VIP_SRV_SITE_REF_INTER_MILLIS ||
                     !CollectionUtils.isEqualCollection(servers, lastServers)) {
                 if (!CollectionUtils.isEqualCollection(servers, lastServers)) {
-                    Loggers.SRV_LOG.info("REFRESH-SERVER-SITE", "server list is changed, old: " + lastServers + ", new: " + servers);
+                    Loggers.SRV_LOG.info("[REFRESH-SERVER-SITE] server list is changed, old: {}, new: {}",
+                        lastServers, servers);
                 }
 
                 lastServers = servers;
@@ -98,48 +97,17 @@ public class NamingProxy {
     }
 
     public static void refreshSrvIfNeed() {
-        refreshSrvIfNeed(StringUtils.EMPTY);
-    }
-
-    public static void refreshSrvIfNeed(String env) {
         try {
             if (System.currentTimeMillis() - lastSrvRefTime < VIP_SRV_REF_INTER_MILLIS) {
                 return;
             }
 
-            if (UtilsAndCommons.STANDALONE_MODE) {
+            if (STANDALONE_MODE) {
                 servers = new ArrayList<>();
-                servers.add(InetAddress.getLocalHost().getHostAddress() + ":" + RunningConfig.getServerPort());
+                servers.add(NetUtils.localServer());
                 return;
             }
 
-            List<String> serverlist = refreshServerListFromDisk();
-
-            List<String> list = new ArrayList<String>();
-            if (!CollectionUtils.isEmpty(serverlist)) {
-                serverlistFromConfig = serverlist;
-                if (list.isEmpty()) {
-                    Loggers.SRV_LOG.warn("Can not acquire server list");
-                }
-            }
-
-
-            if (!StringUtils.isEmpty(env)) {
-                serverListMap.put(env, list);
-            } else {
-                if (!CollectionUtils.isEqualCollection(serverlistFromConfig, list) && CollectionUtils.isNotEmpty(serverlistFromConfig)) {
-                    Loggers.SRV_LOG.info("SERVER-LIST", "server list is not the same between AS and config file, use config file.");
-                    servers = serverlistFromConfig;
-                } else {
-                    servers = list;
-                }
-            }
-
-            if (RunningConfig.getServerPort() > 0) {
-                lastSrvRefTime = System.currentTimeMillis();
-            }
-        } catch (Exception e) {
-            Loggers.SRV_LOG.warn("failed to update server list", e);
             List<String> serverlist = refreshServerListFromDisk();
 
             if (CollectionUtils.isNotEmpty(serverlist)) {
@@ -149,6 +117,13 @@ public class NamingProxy {
             if (CollectionUtils.isNotEmpty(serverlistFromConfig)) {
                 servers = serverlistFromConfig;
             }
+
+            if (RunningConfig.getServerPort() > 0) {
+                lastSrvRefTime = System.currentTimeMillis();
+            }
+
+        } catch (Exception e) {
+            Loggers.SRV_LOG.warn("failed to update server list", e);
         }
     }
 
@@ -157,20 +132,26 @@ public class NamingProxy {
         List<String> result = new ArrayList<>();
         // read nacos config if necessary.
         try {
-            result = IoUtils.readLines(new InputStreamReader(new FileInputStream(UtilsAndCommons.getConfFile()), "UTF-8"));
+            result = readClusterConf();
         } catch (Exception e) {
-            Loggers.SRV_LOG.warn("failed to get config: " + UtilsAndCommons.getConfFile(), e);
+            Loggers.SRV_LOG.warn("failed to get config: " + CLUSTER_CONF_FILE_PATH, e);
         }
 
-        Loggers.DEBUG_LOG.debug("REFRESH-SERVER-LIST1", result);
+        if (Loggers.DEBUG_LOG.isDebugEnabled()) {
+            Loggers.DEBUG_LOG.debug("REFRESH-SERVER-LIST1 {}", result);
+        }
 
         //use system env
         if (CollectionUtils.isEmpty(result)) {
-            result = SystemUtil.getIPsBySystemEnv(UtilsAndCommons.SELF_SERVICE_CLUSTER_ENV);
-            Loggers.DEBUG_LOG.debug("REFRESH-SERVER-LIST4: " + result);
+            result = SystemUtils.getIPsBySystemEnv(UtilsAndCommons.SELF_SERVICE_CLUSTER_ENV);
+            if (Loggers.DEBUG_LOG.isDebugEnabled()) {
+                Loggers.DEBUG_LOG.debug("REFRESH-SERVER-LIST4: {}", result);
+            }
         }
 
-        Loggers.DEBUG_LOG.debug("REFRESH-SERVER-LIST2" + result);
+        if (Loggers.DEBUG_LOG.isDebugEnabled()) {
+            Loggers.DEBUG_LOG.debug("REFRESH-SERVER-LIST2 {}", result);
+        }
 
         if (!result.isEmpty() && !result.get(0).contains(UtilsAndCommons.CLUSTER_CONF_IP_SPLITER)) {
             for (int i = 0; i < result.size(); i++) {
@@ -193,7 +174,9 @@ public class NamingProxy {
         servers.put("sameSite", snapshot);
         servers.put("otherSite", new ArrayList<String>());
 
-        Loggers.SRV_LOG.debug("sameSiteServers:" + servers.toString());
+        if (Loggers.SRV_LOG.isDebugEnabled()) {
+            Loggers.SRV_LOG.debug("sameSiteServers: {}", servers.toString());
+        }
         return servers;
     }
 

@@ -16,7 +16,7 @@
 package com.alibaba.nacos.naming.core;
 
 import com.alibaba.fastjson.annotation.JSONField;
-import com.alibaba.nacos.naming.healthcheck.AbstractHealthCheckConfig;
+import com.alibaba.nacos.api.naming.pojo.AbstractHealthChecker;
 import com.alibaba.nacos.naming.healthcheck.HealthCheckReactor;
 import com.alibaba.nacos.naming.healthcheck.HealthCheckStatus;
 import com.alibaba.nacos.naming.healthcheck.HealthCheckTask;
@@ -30,13 +30,12 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * @author dungu.zpf
+ * @author <a href="mailto:zpf.073@gmail.com">nkorange</a>
  */
-public class Cluster implements Cloneable {
+public class Cluster extends com.alibaba.nacos.api.naming.pojo.Cluster implements Cloneable {
 
     private static final String CLUSTER_NAME_SYNTAX = "[0-9a-zA-Z-]+";
 
-    private String name;
     /**
      * in fact this is CIDR(Classless Inter-Domain Routing). for naming it 'submask' it has historical reasons
      */
@@ -50,19 +49,14 @@ public class Cluster implements Cloneable {
 
     private int defIPPort = -1;
 
-    private boolean useIPPort4Check = true;
-
     @JSONField(name = "nodegroup")
     private String legacySyncConfig;
 
     @JSONField(name = "healthChecker")
-    private AbstractHealthCheckConfig healthChecker = new AbstractHealthCheckConfig.Tcp();
+    private AbstractHealthChecker healthChecker = new AbstractHealthChecker.Tcp();
 
     @JSONField(serialize = false)
     private HealthCheckTask checkTask;
-
-    @JSONField(serialize = false)
-    private Set<IpAddress> ips = new HashSet<IpAddress>();
 
     @JSONField(serialize = false)
     private Set<IpAddress> raftIPs = new HashSet<IpAddress>();
@@ -75,6 +69,10 @@ public class Cluster implements Cloneable {
     private Map<String, String> metadata = new ConcurrentHashMap<>();
 
     public Cluster() {
+    }
+
+    public Cluster(String clusterName) {
+        this.setName(clusterName);
     }
 
     public int getDefIPPort() {
@@ -136,14 +134,6 @@ public class Cluster implements Cloneable {
         return checkTask;
     }
 
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
     public Domain getDom() {
         return dom;
     }
@@ -160,14 +150,6 @@ public class Cluster implements Cloneable {
         this.legacySyncConfig = nodegroup;
     }
 
-    public AbstractHealthCheckConfig getHealthChecker() {
-        return healthChecker;
-    }
-
-    public void setHealthChecker(AbstractHealthCheckConfig healthChecker) {
-        this.healthChecker = healthChecker;
-    }
-
     @Override
     public Cluster clone() throws CloneNotSupportedException {
         super.clone();
@@ -175,23 +157,17 @@ public class Cluster implements Cloneable {
 
         cluster.setHealthChecker(healthChecker.clone());
         cluster.setDom(getDom());
-        cluster.ips = new HashSet<IpAddress>();
         cluster.raftIPs = new HashSet<IpAddress>();
         cluster.checkTask = null;
         cluster.metadata = new HashMap<>(metadata);
         return cluster;
     }
 
-    public void updateIPs(List<IpAddress> ips, boolean diamond) {
+    public void updateIPs(List<IpAddress> ips) {
         HashMap<String, IpAddress> oldIPMap = new HashMap<>(raftIPs.size());
-        if (diamond) {
-            for (IpAddress ip : this.ips) {
-                oldIPMap.put(ip.getDatumKey(), ip);
-            }
-        } else {
-            for (IpAddress ip : this.raftIPs) {
-                oldIPMap.put(ip.getDatumKey(), ip);
-            }
+
+        for (IpAddress ip : this.raftIPs) {
+            oldIPMap.put(ip.getDatumKey(), ip);
         }
 
         List<IpAddress> updatedIPs = updatedIPs(ips, oldIPMap.values());
@@ -211,24 +187,22 @@ public class Cluster implements Cloneable {
                 } else {
                     if (ip.isValid() != oldIP.isValid()) {
                         // ip validation status updated
-                        Loggers.EVT_LOG.info("{" + getDom().getName() + "} {SYNC} " +
-                                "{IP-" + (ip.isValid() ? "ENABLED" : "DISABLED") + "} " + ip.getIp()
-                                + ":" + ip.getPort() + "@" + name);
+                        Loggers.EVT_LOG.info("{} {SYNC} IP-{} {}:{}@{}",
+                            getDom().getName(), (ip.isValid() ? "ENABLED" : "DISABLED"), ip.getIp(), ip.getPort(), getName());
                     }
                 }
 
                 if (ip.getWeight() != oldIP.getWeight()) {
                     // ip validation status updated
-                    Loggers.EVT_LOG.info("{" + getDom().getName() + "} {SYNC} " +
-                            "{IP-UPDATED} " + oldIP.toString() + "->" + ip.toString());
+                    Loggers.EVT_LOG.info("{} {SYNC} {IP-UPDATED} {}->{}", getDom().getName(), oldIP.toString(), ip.toString());
                 }
             }
         }
 
         List<IpAddress> newIPs = subtract(ips, oldIPMap.values());
         if (newIPs.size() > 0) {
-            Loggers.EVT_LOG.info("{" + getDom().getName() + "} {SYNC} {IP-NEW} cluster: " + name
-                    + ", new ips(" + newIPs.size() + "): " + newIPs.toString());
+            Loggers.EVT_LOG.info("{} {SYNC} {IP-NEW} cluster: {}, new ips size: {}, content: {}",
+                getDom().getName(), getName(), newIPs.size(), newIPs.toString());
 
             for (IpAddress ip : newIPs) {
                 HealthCheckStatus.reset(ip);
@@ -238,19 +212,16 @@ public class Cluster implements Cloneable {
         List<IpAddress> deadIPs = subtract(oldIPMap.values(), ips);
 
         if (deadIPs.size() > 0) {
-            Loggers.EVT_LOG.info("{" + getDom().getName() + "} {SYNC} {IP-DEAD} cluster: " + name
-                    + ", dead ips(" + deadIPs.size() + "): " + deadIPs.toString());
+            Loggers.EVT_LOG.info("{} {SYNC} {IP-DEAD} cluster: {}, dead ips size: {}, content: {}",
+                getDom().getName(), getName(), deadIPs.size(), deadIPs.toString());
 
             for (IpAddress ip : deadIPs) {
                 HealthCheckStatus.remv(ip);
             }
         }
 
-        if (diamond) {
-            this.ips = new HashSet<IpAddress>(ips);
-        } else {
-            this.raftIPs = new HashSet<IpAddress>(ips);
-        }
+        this.raftIPs = new HashSet<IpAddress>(ips);
+
         StringBuilder stringBuilder = new StringBuilder();
         for (IpAddress ipAddress : raftIPs) {
             stringBuilder.append(ipAddress.toIPAddr()).append(ipAddress.isValid());
@@ -337,7 +308,7 @@ public class Cluster implements Cloneable {
 
     @Override
     public int hashCode() {
-        return Objects.hash(name);
+        return Objects.hash(getName());
     }
 
     @Override
@@ -346,7 +317,7 @@ public class Cluster implements Cloneable {
             return false;
         }
 
-        return name.equals(((Cluster) obj).getName());
+        return getName().equals(((Cluster) obj).getName());
     }
 
     public int getDefCkport() {
@@ -357,44 +328,42 @@ public class Cluster implements Cloneable {
         this.defCkport = defCkport;
     }
 
-    public boolean isUseIPPort4Check() {
-        return useIPPort4Check;
-    }
-
-    public void setUseIPPort4Check(boolean useIPPort4Check) {
-        this.useIPPort4Check = useIPPort4Check;
-    }
-
     public void update(Cluster cluster) {
 
         if (!healthChecker.equals(cluster.getHealthChecker())) {
-            Loggers.SRV_LOG.info("[CLUSTER-UPDATE] " + cluster.getDom().getName() + ":" + cluster.getName() + ", healthChecker: " + healthChecker.toString() + " -> " + cluster.getHealthChecker().toString());
+            Loggers.SRV_LOG.info("[CLUSTER-UPDATE] {}:{}:, healthChecker: {} -> {}",
+                cluster.getDom().getName(), cluster.getName(), healthChecker.toString(), cluster.getHealthChecker().toString());
             healthChecker = cluster.getHealthChecker();
         }
 
         if (defCkport != cluster.getDefCkport()) {
-            Loggers.SRV_LOG.info("[CLUSTER-UPDATE] " + cluster.getDom().getName() + ":" + cluster.getName() + ", defCkport: " + defCkport + " -> " + cluster.getDefCkport());
+            Loggers.SRV_LOG.info("[CLUSTER-UPDATE] {}:{}, defCkport: {} -> {}",
+                cluster.getDom().getName(), cluster.getName(), defCkport, cluster.getDefCkport());
             defCkport = cluster.getDefCkport();
         }
 
         if (defIPPort != cluster.getDefIPPort()) {
-            Loggers.SRV_LOG.info("[CLUSTER-UPDATE] " + cluster.getDom().getName() + ":" + cluster.getName() + ", defIPPort: " + defIPPort + " -> " + cluster.getDefIPPort());
+            Loggers.SRV_LOG.info("[CLUSTER-UPDATE] {}:{}, defIPPort: {} -> {}",
+                cluster.getDom().getName(), cluster.getName(), defIPPort, cluster.getDefIPPort());
             defIPPort = cluster.getDefIPPort();
         }
 
         if (!StringUtils.equals(submask, cluster.getSubmask())) {
-            Loggers.SRV_LOG.info("[CLUSTER-UPDATE] " + cluster.getDom().getName() + ":" + cluster.getName() + ", submask: " + submask + " -> " + cluster.getSubmask());
+            Loggers.SRV_LOG.info("[CLUSTER-UPDATE] {}:{}, submask: {} -> {}",
+                cluster.getDom().getName(), cluster.getName(), submask, cluster.getSubmask());
             submask = cluster.getSubmask();
         }
 
         if (!StringUtils.equals(sitegroup, cluster.getSitegroup())) {
-            Loggers.SRV_LOG.info("[CLUSTER-UPDATE] " + cluster.getDom().getName() + ":" + cluster.getName() + ", sitegroup: " + sitegroup + " -> " + cluster.getSitegroup());
+            Loggers.SRV_LOG.info("[CLUSTER-UPDATE] {}:{}, sitegroup: {} -> {}",
+                cluster.getDom().getName(), cluster.getName(), sitegroup, cluster.getSitegroup());
             sitegroup = cluster.getSitegroup();
         }
 
-        if (useIPPort4Check != cluster.isUseIPPort4Check()) {
-            Loggers.SRV_LOG.info("[CLUSTER-UPDATE] " + cluster.getDom().getName() + ":" + cluster.getName() + ", useIPPort4Check: " + useIPPort4Check + " -> " + cluster.isUseIPPort4Check());
-            useIPPort4Check = cluster.isUseIPPort4Check();
+        if (isUseIPPort4Check() != cluster.isUseIPPort4Check()) {
+            Loggers.SRV_LOG.info("[CLUSTER-UPDATE] {}:{}, useIPPort4Check: {} -> {}",
+                cluster.getDom().getName(), cluster.getName(), isUseIPPort4Check(), cluster.isUseIPPort4Check());
+            setUseIPPort4Check(cluster.isUseIPPort4Check());
         }
 
         metadata = cluster.getMetadata();
@@ -420,24 +389,16 @@ public class Cluster implements Cloneable {
         this.sitegroup = sitegroup;
     }
 
-    public Map<String, String> getMetadata() {
-        return metadata;
-    }
-
-    public void setMetadata(Map<String, String> metadata) {
-        this.metadata = metadata;
-    }
-
     public boolean responsible(IpAddress ip) {
         return Switch.isHealthCheckEnabled(dom.getName())
-                && !getHealthCheckTask().isCancelled()
-                && DistroMapper.responsible(getDom().getName())
-                && ipContains.containsKey(ip.toIPAddr());
+            && !getHealthCheckTask().isCancelled()
+            && DistroMapper.responsible(getDom().getName())
+            && ipContains.containsKey(ip.toIPAddr());
     }
 
     public void valid() {
-        if (!name.matches(CLUSTER_NAME_SYNTAX)) {
-            throw new IllegalArgumentException("cluster name can only have these characters: 0-9a-zA-Z-, current: " + name);
+        if (!getName().matches(CLUSTER_NAME_SYNTAX)) {
+            throw new IllegalArgumentException("cluster name can only have these characters: 0-9a-zA-Z-, current: " + getName());
         }
 
         String[] cidrGroups = submask.split("\\|");
@@ -446,16 +407,9 @@ public class Cluster implements Cloneable {
 
             for (String cidr : cidrs) {
                 if (!cidr.matches(UtilsAndCommons.CIDR_REGEX)) {
-                    throw new IllegalArgumentException("malformed submask: " + submask + " for cluster: " + name);
+                    throw new IllegalArgumentException("malformed submask: " + submask + " for cluster: " + getName());
                 }
             }
-        }
-    }
-
-    public static void main(String[] args) {
-        String v1 = "nesttest";
-        if (v1.matches(CLUSTER_NAME_SYNTAX)) {
-            System.out.print("");
         }
     }
 }

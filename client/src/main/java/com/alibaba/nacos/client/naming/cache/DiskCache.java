@@ -17,7 +17,7 @@ package com.alibaba.nacos.client.naming.cache;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.nacos.api.naming.pojo.Instance;
-import com.alibaba.nacos.client.naming.core.Domain;
+import com.alibaba.nacos.api.naming.pojo.ServiceInfo;
 import com.alibaba.nacos.client.naming.utils.CollectionUtils;
 import com.alibaba.nacos.client.naming.utils.LogUtils;
 import com.alibaba.nacos.client.naming.utils.StringUtils;
@@ -25,6 +25,7 @@ import com.alibaba.nacos.client.naming.utils.StringUtils;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.StringReader;
+import java.net.URLDecoder;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -36,12 +37,14 @@ import java.util.Map;
  */
 public class DiskCache {
 
-    public static void write(Domain dom, String dir) {
+    public static void write(ServiceInfo dom, String dir) {
 
         try {
             makeSureCacheDirExists(dir);
 
-            File file = new File(dir, dom.getKey());
+
+
+            File file = new File(dir, dom.getKeyEncoded());
             if (!file.exists()) {
                 // add another !file.exists() to avoid conflicted creating-new-file from multi-instances
                 if (!file.createNewFile() && !file.exists()) {
@@ -72,8 +75,8 @@ public class DiskCache {
         return lineSeparator;
     }
 
-    public static Map<String, Domain> read(String cacheDir) {
-        Map<String, Domain> domMap = new HashMap<String, Domain>(16);
+    public static Map<String, ServiceInfo> read(String cacheDir) {
+        Map<String, ServiceInfo> domMap = new HashMap<String, ServiceInfo>(16);
 
         BufferedReader reader = null;
         try {
@@ -87,15 +90,19 @@ public class DiskCache {
                     continue;
                 }
 
-                if (!(file.getName().endsWith(Domain.SPLITER + "meta") || file.getName().endsWith(Domain.SPLITER + "special-url"))) {
-                    Domain dom = new Domain(file.getName());
+                String fileName = URLDecoder.decode(file.getName(), "UTF-8");
+
+                if (!(fileName.endsWith(ServiceInfo.SPLITER + "meta") || fileName.endsWith(
+                    ServiceInfo.SPLITER + "special-url"))) {
+                    ServiceInfo dom = new ServiceInfo(fileName);
                     List<Instance> ips = new ArrayList<Instance>();
                     dom.setHosts(ips);
 
-                    Domain newFormat = null;
+                    ServiceInfo newFormat = null;
 
                     try {
-                        String dataString = ConcurrentDiskUtil.getFileContent(file, Charset.defaultCharset().toString());
+                        String dataString = ConcurrentDiskUtil.getFileContent(file,
+                            Charset.defaultCharset().toString());
                         reader = new BufferedReader(new StringReader(dataString));
 
                         String json;
@@ -105,7 +112,7 @@ public class DiskCache {
                                     continue;
                                 }
 
-                                newFormat = JSON.parseObject(json, Domain.class);
+                                newFormat = JSON.parseObject(json, ServiceInfo.class);
 
                                 if (StringUtils.isEmpty(newFormat.getName())) {
                                     ips.add(JSON.parseObject(json, Instance.class));
@@ -125,7 +132,8 @@ public class DiskCache {
                             //ignore
                         }
                     }
-                    if (newFormat != null && !StringUtils.isEmpty(newFormat.getName()) && !CollectionUtils.isEmpty(newFormat.getHosts())) {
+                    if (newFormat != null && !StringUtils.isEmpty(newFormat.getName()) && !CollectionUtils.isEmpty(
+                        newFormat.getHosts())) {
                         domMap.put(dom.getKey(), newFormat);
                     } else if (!CollectionUtils.isEmpty(dom.getHosts())) {
                         domMap.put(dom.getKey(), dom);

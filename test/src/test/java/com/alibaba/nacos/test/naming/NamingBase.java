@@ -25,7 +25,7 @@ import com.alibaba.nacos.api.naming.pojo.Instance;
 import com.alibaba.nacos.api.naming.pojo.Service;
 
 /**
- * @author dungu.zpf
+ * @author <a href="mailto:zpf.073@gmail.com">nkorange</a>
  */
 public class NamingBase {
 
@@ -41,6 +41,9 @@ public class NamingBase {
     public static final String TEST_IP_4_DOM_2 = "127.0.0.2";
     public static final String TEST_PORT_4_DOM_2 = "7070";
     public static final String TETS_TOKEN_4_DOM_2 = "xyz";
+    public static final String TEST_SERVER_STATUS = "UP";
+
+    static final String NAMING_CONTROLLER_PATH = "/nacos/v1/ns";
 
     public static final int TEST_PORT = 8080;
 
@@ -66,32 +69,12 @@ public class NamingBase {
         instance.setPort(TEST_PORT);
         instance.setHealthy(true);
         instance.setWeight(2.0);
-        Map<String, String> instanceMeta = new HashMap<>();
+        Map<String, String> instanceMeta = new HashMap<String, String>();
         instanceMeta.put("site", "et2");
         instance.setMetadata(instanceMeta);
 
-        Service service = new Service(serviceName);
-        service.setApp("nacos-naming");
-        service.setHealthCheckMode("server");
-        service.setProtectThreshold(0.8F);
-        service.setGroup("CNCF");
-        Map<String, String> serviceMeta = new HashMap<>();
-        serviceMeta.put("symmetricCall", "true");
-        service.setMetadata(serviceMeta);
-        instance.setService(service);
-
-        Cluster cluster = new Cluster();
-        cluster.setName("c1");
-        AbstractHealthChecker.Http healthChecker = new AbstractHealthChecker.Http();
-        healthChecker.setExpectedResponseCode(400);
-        healthChecker.setHeaders("Client-Version|Nacos");
-        healthChecker.setPath("/xxx.html");
-        cluster.setHealthChecker(healthChecker);
-        Map<String, String> clusterMeta = new HashMap<>();
-        clusterMeta.put("xxx", "yyyy");
-        cluster.setMetadata(clusterMeta);
-
-        instance.setCluster(cluster);
+        instance.setServiceName(serviceName);
+        instance.setClusterName("c1");
 
         return instance;
     }
@@ -151,12 +134,12 @@ public class NamingBase {
     }
 
     public static boolean verifyInstanceList(List<Instance> instanceList1, List<Instance> instanceList2) {
-        Map<String, Instance> instanceMap = new HashMap<>();
+        Map<String, Instance> instanceMap = new HashMap<String, Instance>();
         for (Instance instance : instanceList1) {
             instanceMap.put(instance.getIp(), instance);
         }
 
-        Map<String, Instance> instanceGetMap = new HashMap<>();
+        Map<String, Instance> instanceGetMap = new HashMap<String, Instance>();
         for (Instance instance : instanceList2) {
             instanceGetMap.put(instance.getIp(), instance);
         }

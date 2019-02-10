@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * @author dungu.zpf
+ * @author <a href="mailto:zpf.073@gmail.com">nkorange</a>
  */
 public class DomainTest {
 
@@ -81,7 +81,7 @@ public class DomainTest {
         IpAddress ipAddress = new IpAddress();
         ipAddress.setIp("1.1.1.1");
         ipAddress.setPort(1234);
-        List<IpAddress> list = new ArrayList<>();
+        List<IpAddress> list = new ArrayList<IpAddress>();
         list.add(ipAddress);
 
         domain.onChange("iplist", JSON.toJSONString(list));
