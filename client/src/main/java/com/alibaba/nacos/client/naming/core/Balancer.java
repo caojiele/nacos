@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.alibaba.nacos.client.naming.core;
 
 import com.alibaba.nacos.api.naming.pojo.Instance;
@@ -23,48 +24,52 @@ import com.alibaba.nacos.client.naming.utils.Pair;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 import static com.alibaba.nacos.client.utils.LogUtils.NAMING_LOGGER;
 
 /**
+ * Balancer.
+ *
  * @author xuanyin
  */
 public class Balancer {
-
-    /**
-     * report status to server
-     */
-    public final static List<String> UNCONSISTENT_SERVICE_WITH_ADDRESS_SERVER = new CopyOnWriteArrayList<String>();
-
+    
     public static class RandomByWeight {
-
+    
+        /**
+         * Select all instance.
+         *
+         * @param serviceInfo service information
+         * @return all instance of services
+         */
         public static List<Instance> selectAll(ServiceInfo serviceInfo) {
-            List<Instance> hosts = nothing(serviceInfo);
-
+            List<Instance> hosts = serviceInfo.getHosts();
+            
             if (CollectionUtils.isEmpty(hosts)) {
                 throw new IllegalStateException("no host to srv for serviceInfo: " + serviceInfo.getName());
             }
-
+            
             return hosts;
         }
-
+    
+        /**
+         * Random select one instance from service.
+         *
+         * @param dom service
+         * @return random instance
+         */
         public static Instance selectHost(ServiceInfo dom) {
-
+            
             List<Instance> hosts = selectAll(dom);
-
+            
             if (CollectionUtils.isEmpty(hosts)) {
                 throw new IllegalStateException("no host to srv for service: " + dom.getName());
             }
-
+            
             return getHostByRandomWeight(hosts);
         }
-
-        public static List<Instance> nothing(ServiceInfo serviceInfo) {
-            return serviceInfo.getHosts();
-        }
     }
-
+    
     /**
      * Return one host from the host list by random-weight.
      *
@@ -77,11 +82,7 @@ public class Balancer {
             NAMING_LOGGER.debug("hosts == null || hosts.size() == 0");
             return null;
         }
-
-        Chooser<String, Instance> vipChooser = new Chooser<String, Instance>("www.taobao.com");
-
         NAMING_LOGGER.debug("new Chooser");
-
         List<Pair<Instance>> hostsWithWeight = new ArrayList<Pair<Instance>>();
         for (Instance host : hosts) {
             if (host.isHealthy()) {
@@ -89,9 +90,9 @@ public class Balancer {
             }
         }
         NAMING_LOGGER.debug("for (Host host : hosts)");
+        Chooser<String, Instance> vipChooser = new Chooser<String, Instance>("www.taobao.com");
         vipChooser.refresh(hostsWithWeight);
         NAMING_LOGGER.debug("vipChooser.refresh");
-        Instance host = vipChooser.randomWithWeight();
-        return host;
+        return vipChooser.randomWithWeight();
     }
 }
