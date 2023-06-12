@@ -23,6 +23,7 @@ import com.alibaba.nacos.api.naming.pojo.Service;
 import com.alibaba.nacos.api.naming.pojo.ServiceInfo;
 import com.alibaba.nacos.api.naming.utils.NamingUtils;
 import com.alibaba.nacos.api.selector.AbstractSelector;
+import com.alibaba.nacos.client.env.NacosClientProperties;
 import com.alibaba.nacos.client.naming.cache.ServiceInfoHolder;
 import com.alibaba.nacos.client.naming.core.ServerListManager;
 import com.alibaba.nacos.client.naming.core.ServiceInfoUpdateService;
@@ -31,10 +32,11 @@ import com.alibaba.nacos.client.naming.remote.gprc.NamingGrpcClientProxy;
 import com.alibaba.nacos.client.naming.remote.http.NamingHttpClientManager;
 import com.alibaba.nacos.client.naming.remote.http.NamingHttpClientProxy;
 import com.alibaba.nacos.client.security.SecurityProxy;
+import com.alibaba.nacos.common.utils.CollectionUtils;
 import com.alibaba.nacos.common.utils.ThreadUtils;
 
+import java.util.List;
 import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -63,35 +65,59 @@ public class NamingClientProxyDelegate implements NamingClientProxy {
     
     private ScheduledExecutorService executorService;
     
-    public NamingClientProxyDelegate(String namespace, ServiceInfoHolder serviceInfoHolder, Properties properties,
+    public NamingClientProxyDelegate(String namespace, ServiceInfoHolder serviceInfoHolder, NacosClientProperties properties,
             InstancesChangeNotifier changeNotifier) throws NacosException {
         this.serviceInfoUpdateService = new ServiceInfoUpdateService(properties, serviceInfoHolder, this,
                 changeNotifier);
         this.serverListManager = new ServerListManager(properties, namespace);
         this.serviceInfoHolder = serviceInfoHolder;
-        this.securityProxy = new SecurityProxy(properties, NamingHttpClientManager.getInstance().getNacosRestTemplate());
-        initSecurityProxy();
-        this.httpClientProxy = new NamingHttpClientProxy(namespace, securityProxy, serverListManager, properties,
-                serviceInfoHolder);
+        this.securityProxy = new SecurityProxy(this.serverListManager.getServerList(),
+                NamingHttpClientManager.getInstance().getNacosRestTemplate());
+        initSecurityProxy(properties);
+        this.httpClientProxy = new NamingHttpClientProxy(namespace, securityProxy, serverListManager, properties);
         this.grpcClientProxy = new NamingGrpcClientProxy(namespace, securityProxy, serverListManager, properties,
                 serviceInfoHolder);
     }
     
-    private void initSecurityProxy() {
+    private void initSecurityProxy(NacosClientProperties properties) {
         this.executorService = new ScheduledThreadPoolExecutor(1, r -> {
             Thread t = new Thread(r);
             t.setName("com.alibaba.nacos.client.naming.security");
             t.setDaemon(true);
             return t;
         });
-        this.securityProxy.login(serverListManager.getServerList());
-        this.executorService.scheduleWithFixedDelay(() -> securityProxy.login(serverListManager.getServerList()), 0,
-                SECURITY_INFO_REFRESH_INTERVAL_MILLS, TimeUnit.MILLISECONDS);
+        final Properties nacosClientPropertiesView = properties.asProperties();
+        this.securityProxy.login(nacosClientPropertiesView);
+        this.executorService
+                .scheduleWithFixedDelay(() -> securityProxy.login(nacosClientPropertiesView), 0, SECURITY_INFO_REFRESH_INTERVAL_MILLS,
+                        TimeUnit.MILLISECONDS);
     }
     
     @Override
     public void registerService(String serviceName, String groupName, Instance instance) throws NacosException {
         getExecuteClientProxy(instance).registerService(serviceName, groupName, instance);
+    }
+    
+    @Override
+    public void batchRegisterService(String serviceName, String groupName, List<Instance> instances)
+            throws NacosException {
+        NAMING_LOGGER.info("batchRegisterInstance instances: {} ,serviceName: {} begin.", instances, serviceName);
+        if (CollectionUtils.isEmpty(instances)) {
+            NAMING_LOGGER.warn("batchRegisterInstance instances is Empty:{}", instances);
+        }
+        grpcClientProxy.batchRegisterService(serviceName, groupName, instances);
+        NAMING_LOGGER.info("batchRegisterInstance instances: {} ,serviceName: {} finish.", instances, serviceName);
+    }
+    
+    @Override
+    public void batchDeregisterService(String serviceName, String groupName, List<Instance> instances)
+            throws NacosException {
+        NAMING_LOGGER.info("batch DeregisterInstance instances: {} ,serviceName: {} begin.", instances, serviceName);
+        if (CollectionUtils.isEmpty(instances)) {
+            NAMING_LOGGER.warn("batch DeregisterInstance instances is Empty:{}", instances);
+        }
+        grpcClientProxy.batchDeregisterService(serviceName, groupName, instances);
+        NAMING_LOGGER.info("batch DeregisterInstance instances: {} ,serviceName: {} finish.", instances, serviceName);
     }
     
     @Override
@@ -152,7 +178,8 @@ public class NamingClientProxyDelegate implements NamingClientProxy {
     
     @Override
     public void unsubscribe(String serviceName, String groupName, String clusters) throws NacosException {
-        NAMING_LOGGER.debug("[UNSUBSCRIBE-SERVICE] service:{}, group:{}, cluster:{} ", serviceName, groupName, clusters);
+        NAMING_LOGGER
+                .debug("[UNSUBSCRIBE-SERVICE] service:{}, group:{}, cluster:{} ", serviceName, groupName, clusters);
         serviceInfoUpdateService.stopUpdateIfContain(serviceName, groupName, clusters);
         grpcClientProxy.unsubscribe(serviceName, groupName, clusters);
     }
@@ -160,11 +187,6 @@ public class NamingClientProxyDelegate implements NamingClientProxy {
     @Override
     public boolean isSubscribed(String serviceName, String groupName, String clusters) throws NacosException {
         return grpcClientProxy.isSubscribed(serviceName, groupName, clusters);
-    }
-    
-    @Override
-    public void updateBeatInfo(Set<Instance> modifiedInstances) {
-        httpClientProxy.updateBeatInfo(modifiedInstances);
     }
     
     @Override
@@ -184,6 +206,7 @@ public class NamingClientProxyDelegate implements NamingClientProxy {
         serverListManager.shutdown();
         httpClientProxy.shutdown();
         grpcClientProxy.shutdown();
+        securityProxy.shutdown();
         ThreadUtils.shutdownThreadPool(executorService, NAMING_LOGGER);
         NAMING_LOGGER.info("{} do shutdown stop", className);
     }

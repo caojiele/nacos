@@ -21,6 +21,7 @@ import com.alibaba.nacos.api.exception.NacosException;
 import com.alibaba.nacos.api.naming.pojo.Instance;
 import com.alibaba.nacos.api.naming.pojo.ServiceInfo;
 import com.alibaba.nacos.api.naming.utils.NamingUtils;
+import com.alibaba.nacos.client.env.NacosClientProperties;
 import com.alibaba.nacos.client.monitor.MetricsMonitor;
 import com.alibaba.nacos.client.naming.backups.FailoverReactor;
 import com.alibaba.nacos.client.naming.event.InstancesChangeEvent;
@@ -36,7 +37,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -66,7 +66,9 @@ public class ServiceInfoHolder implements Closeable {
     
     private String cacheDir;
     
-    public ServiceInfoHolder(String namespace, Properties properties) {
+    private String notifierEventScope;
+    
+    public ServiceInfoHolder(String namespace, String notifierEventScope, NacosClientProperties properties) {
         initCacheDir(namespace, properties);
         if (isLoadCacheAtStart(properties)) {
             this.serviceInfoMap = new ConcurrentHashMap<>(DiskCache.read(this.cacheDir));
@@ -75,10 +77,11 @@ public class ServiceInfoHolder implements Closeable {
         }
         this.failoverReactor = new FailoverReactor(this, cacheDir);
         this.pushEmptyProtection = isPushEmptyProtect(properties);
+        this.notifierEventScope = notifierEventScope;
     }
     
-    private void initCacheDir(String namespace, Properties properties) {
-        String jmSnapshotPath = System.getProperty(JM_SNAPSHOT_PATH_PROPERTY);
+    private void initCacheDir(String namespace, NacosClientProperties properties) {
+        String jmSnapshotPath = properties.getProperty(JM_SNAPSHOT_PATH_PROPERTY);
     
         String namingCacheRegistryDir = "";
         if (properties.getProperty(PropertyKeyConst.NAMING_CACHE_REGISTRY_DIR) != null) {
@@ -89,12 +92,12 @@ public class ServiceInfoHolder implements Closeable {
             cacheDir = jmSnapshotPath + File.separator + FILE_PATH_NACOS + namingCacheRegistryDir
                     + File.separator + FILE_PATH_NAMING + File.separator + namespace;
         } else {
-            cacheDir = System.getProperty(USER_HOME_PROPERTY) + File.separator + FILE_PATH_NACOS + namingCacheRegistryDir
+            cacheDir = properties.getProperty(USER_HOME_PROPERTY) + File.separator + FILE_PATH_NACOS + namingCacheRegistryDir
                     + File.separator + FILE_PATH_NAMING + File.separator + namespace;
         }
     }
     
-    private boolean isLoadCacheAtStart(Properties properties) {
+    private boolean isLoadCacheAtStart(NacosClientProperties properties) {
         boolean loadCacheAtStart = false;
         if (properties != null && StringUtils
                 .isNotEmpty(properties.getProperty(PropertyKeyConst.NAMING_LOAD_CACHE_AT_START))) {
@@ -104,7 +107,7 @@ public class ServiceInfoHolder implements Closeable {
         return loadCacheAtStart;
     }
     
-    private boolean isPushEmptyProtect(Properties properties) {
+    private boolean isPushEmptyProtect(NacosClientProperties properties) {
         boolean pushEmptyProtection = false;
         if (properties != null && StringUtils
                 .isNotEmpty(properties.getProperty(PropertyKeyConst.NAMING_PUSH_EMPTY_PROTECTION))) {
@@ -165,7 +168,7 @@ public class ServiceInfoHolder implements Closeable {
         if (changed) {
             NAMING_LOGGER.info("current ips:({}) service: {} -> {}", serviceInfo.ipCount(), serviceInfo.getKey(),
                     JacksonUtils.toJson(serviceInfo.getHosts()));
-            NotifyCenter.publishEvent(new InstancesChangeEvent(serviceInfo.getName(), serviceInfo.getGroupName(),
+            NotifyCenter.publishEvent(new InstancesChangeEvent(notifierEventScope, serviceInfo.getName(), serviceInfo.getGroupName(),
                     serviceInfo.getClusters(), serviceInfo.getHosts()));
             DiskCache.write(serviceInfo, cacheDir);
         }
@@ -188,20 +191,20 @@ public class ServiceInfoHolder implements Closeable {
             return false;
         }
         boolean changed = false;
-        Map<String, Instance> oldHostMap = new HashMap<String, Instance>(oldService.getHosts().size());
+        Map<String, Instance> oldHostMap = new HashMap<>(oldService.getHosts().size());
         for (Instance host : oldService.getHosts()) {
             oldHostMap.put(host.toInetAddr(), host);
         }
-        Map<String, Instance> newHostMap = new HashMap<String, Instance>(newService.getHosts().size());
+        Map<String, Instance> newHostMap = new HashMap<>(newService.getHosts().size());
         for (Instance host : newService.getHosts()) {
             newHostMap.put(host.toInetAddr(), host);
         }
         
-        Set<Instance> modHosts = new HashSet<Instance>();
-        Set<Instance> newHosts = new HashSet<Instance>();
-        Set<Instance> remvHosts = new HashSet<Instance>();
+        Set<Instance> modHosts = new HashSet<>();
+        Set<Instance> newHosts = new HashSet<>();
+        Set<Instance> remvHosts = new HashSet<>();
         
-        List<Map.Entry<String, Instance>> newServiceHosts = new ArrayList<Map.Entry<String, Instance>>(
+        List<Map.Entry<String, Instance>> newServiceHosts = new ArrayList<>(
                 newHostMap.entrySet());
         for (Map.Entry<String, Instance> entry : newServiceHosts) {
             Instance host = entry.getValue();
@@ -222,11 +225,9 @@ public class ServiceInfoHolder implements Closeable {
             if (newHostMap.containsKey(key)) {
                 continue;
             }
-            
-            if (!newHostMap.containsKey(key)) {
-                remvHosts.add(host);
-            }
-            
+
+            //add to remove hosts
+            remvHosts.add(host);
         }
         
         if (newHosts.size() > 0) {

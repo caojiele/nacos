@@ -35,6 +35,8 @@ public class Constants {
         
         public static final String JM_SNAPSHOT_PATH = "JM.SNAPSHOT.PATH";
         
+        public static final String NACOS_ENV_FIRST = "nacos.env.first";
+        
     }
     
     public static class Disk {
@@ -49,13 +51,6 @@ public class Constants {
         public static final String UP = "UP";
         
         public static final String DOWN = "DOWN";
-    }
-    
-    public static class Protocols {
-        
-        public static final String HTTP = "http://";
-        
-        public static final String HTTPS = "https://";
     }
     
     public static class Security {

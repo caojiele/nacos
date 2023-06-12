@@ -25,6 +25,7 @@ import com.alibaba.nacos.api.naming.pojo.Service;
 import com.alibaba.nacos.api.selector.AbstractSelector;
 import com.alibaba.nacos.api.selector.ExpressionSelector;
 import com.alibaba.nacos.api.selector.NoneSelector;
+import com.alibaba.nacos.client.env.NacosClientProperties;
 import com.alibaba.nacos.client.naming.core.ServerListManager;
 import com.alibaba.nacos.client.naming.remote.http.NamingHttpClientManager;
 import com.alibaba.nacos.client.naming.remote.http.NamingHttpClientProxy;
@@ -72,28 +73,30 @@ public class NacosNamingMaintainService implements NamingMaintainService {
     }
     
     private void init(Properties properties) throws NacosException {
-        ValidatorUtils.checkInitParam(properties);
-        namespace = InitUtils.initNamespaceForNaming(properties);
+        final NacosClientProperties nacosClientProperties = NacosClientProperties.PROTOTYPE.derive(properties);
+        ValidatorUtils.checkInitParam(nacosClientProperties);
+        namespace = InitUtils.initNamespaceForNaming(nacosClientProperties);
         InitUtils.initSerialization();
-        InitUtils.initWebRootContext(properties);
-        serverListManager = new ServerListManager(properties, namespace);
-        securityProxy = new SecurityProxy(properties,
+        InitUtils.initWebRootContext(nacosClientProperties);
+        serverListManager = new ServerListManager(nacosClientProperties, namespace);
+        securityProxy = new SecurityProxy(serverListManager.getServerList(),
                 NamingHttpClientManager.getInstance().getNacosRestTemplate());
-        initSecurityProxy();
-        serverProxy = new NamingHttpClientProxy(namespace, securityProxy, serverListManager, properties, null);
+        initSecurityProxy(properties);
+        serverProxy = new NamingHttpClientProxy(namespace, securityProxy, serverListManager, nacosClientProperties);
     }
     
-    private void initSecurityProxy() {
+    private void initSecurityProxy(Properties properties) {
         this.executorService = new ScheduledThreadPoolExecutor(1, r -> {
             Thread t = new Thread(r);
             t.setName("com.alibaba.nacos.client.naming.maintainService.security");
             t.setDaemon(true);
             return t;
         });
-        this.securityProxy.login(serverListManager.getServerList());
-        this.executorService.scheduleWithFixedDelay(() -> securityProxy.login(serverListManager.getServerList()), 0,
-                SECURITY_INFO_REFRESH_INTERVAL_MILLS, TimeUnit.MILLISECONDS);
-    
+        this.securityProxy.login(properties);
+        this.executorService
+                .scheduleWithFixedDelay(() -> securityProxy.login(properties), 0, SECURITY_INFO_REFRESH_INTERVAL_MILLS,
+                        TimeUnit.MILLISECONDS);
+        
     }
     
     @Override

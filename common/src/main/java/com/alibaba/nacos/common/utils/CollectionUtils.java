@@ -35,6 +35,9 @@ import java.util.Set;
  * @author <a href="mailto:liaochuntao@live.com">liaochuntao</a>
  */
 public final class CollectionUtils {
+
+    private CollectionUtils() {
+    }
     
     /**
      * Returns the <code>index</code>-th value in <code>object</code>, throwing
@@ -237,7 +240,7 @@ public final class CollectionUtils {
      * Returns the value to which the specified index , or {@code defaultValue} if this collection contains no value for
      * the index.
      *
-     * @param obj         the object to get a value from
+     * @param obj          the object to get a value from
      * @param index        the index to get
      * @param defaultValue default value
      * @param <T>          General Type
@@ -254,9 +257,10 @@ public final class CollectionUtils {
     
     /**
      * return an arraylist containing all input parameters.
-     * @author zzq
+     *
      * @param elements element array
      * @return arraylist containing all input parameters
+     * @author zzq
      */
     public static <T> List<T> list(T... elements) {
         if (elements == null) {
@@ -268,7 +272,8 @@ public final class CollectionUtils {
     }
     
     /**
-     * Return an set containing all input parameters.
+     * Return a set containing all input parameters.
+     *
      * @param elements elements element array
      * @return set containing all input parameters
      */
@@ -276,16 +281,17 @@ public final class CollectionUtils {
         if (elements == null) {
             throw new IllegalArgumentException("Expected an array of elements (or empty array) but received a null.");
         } else {
-            return new LinkedHashSet(Arrays.asList(elements));
+            return new LinkedHashSet<>(Arrays.asList(elements));
         }
     }
     
     /**
-     * return the first element, if the iterator contains multiple elements,
-     * will throw {@code IllegalArgumentException}.
-     * @throws NoSuchElementException if the iterator is empty
-     * @throws IllegalArgumentException if the iterator contains multiple elements.
-     * The state of the iterator is unspecified.
+     * return the first element, if the iterator contains multiple elements, will throw {@code
+     * IllegalArgumentException}.
+     *
+     * @throws NoSuchElementException   if the iterator is empty
+     * @throws IllegalArgumentException if the iterator contains multiple elements. The state of the iterator is
+     *                                  unspecified.
      */
     public static <T> T getOnlyElement(Iterable<T> iterable) {
         if (iterable == null) {
@@ -301,17 +307,27 @@ public final class CollectionUtils {
     
     @SuppressWarnings("PMD.UndefineMagicConstantRule")
     private static <T> String buildExceptionMessage(Iterator<T> iterator, T first) {
-        String msg = "";
-        msg += "expected one element but was: <";
-        msg += first;
+        StringBuilder msg = new StringBuilder();
+        msg.append("expected one element but was: <");
+        msg.append(first);
         for (int i = 0; i < 4 && iterator.hasNext(); i++) {
-            msg += ", ";
-            msg += iterator.next();
+            msg.append(", ");
+            msg.append(iterator.next());
         }
         if (iterator.hasNext()) {
-            msg += ", ...";
+            msg.append(", ...");
         }
-        msg += '>';
-        return msg;
+        msg.append('>');
+        return msg.toString();
+    }
+    
+    /**
+     * Return {@code true} if the supplied Map is {@code null} or empty. Otherwise, return {@code false}.
+     *
+     * @param map the Map to check
+     * @return whether the given Map is empty
+     */
+    public static boolean isMapEmpty(Map<?, ?> map) {
+        return (map == null || map.isEmpty());
     }
 }

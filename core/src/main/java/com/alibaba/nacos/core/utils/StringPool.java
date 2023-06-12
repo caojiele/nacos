@@ -33,7 +33,7 @@ public class StringPool {
     private static final Cache<String, String> GROUP_KEY_CACHE;
     
     static {
-        GROUP_KEY_CACHE = CacheBuilder.builder().maximumSize(5000000)
+        GROUP_KEY_CACHE = CacheBuilder.<String, String>builder().maximumSize(5000000)
                 .expireNanos(180, TimeUnit.SECONDS)
                 .lru(true)
                 .build();
@@ -55,7 +55,7 @@ public class StringPool {
             value = GROUP_KEY_CACHE.get(key);
         }
         
-        return value;
+        return value == null ? key : value;
     }
     
     public static long size() {

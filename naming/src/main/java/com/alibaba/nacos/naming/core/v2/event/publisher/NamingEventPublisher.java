@@ -101,7 +101,6 @@ public class NamingEventPublisher extends Thread implements ShardedEventPublishe
         if (!success) {
             Loggers.EVT_LOG.warn("Unable to plug in due to interruption, synchronize sending time, event : {}", event);
             handleEvent(event);
-            return true;
         }
         return true;
     }
@@ -159,6 +158,8 @@ public class NamingEventPublisher extends Thread implements ShardedEventPublishe
                 handleEvent(event);
             } catch (InterruptedException e) {
                 Loggers.EVT_LOG.warn("Naming Event Publisher {} take event from queue failed:", this.publisherName, e);
+                // set the interrupted flag
+                Thread.currentThread().interrupt();
             }
         }
     }

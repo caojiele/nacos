@@ -16,7 +16,7 @@
 
 package com.alibaba.nacos.console.exception;
 
-import com.alibaba.nacos.auth.exception.AccessException;
+import com.alibaba.nacos.plugin.auth.exception.AccessException;
 import com.alibaba.nacos.common.model.RestResultUtils;
 import com.alibaba.nacos.common.utils.ExceptionUtil;
 import com.alibaba.nacos.core.utils.Commons;
@@ -42,6 +42,7 @@ public class ConsoleExceptionHandler {
     
     @ExceptionHandler(AccessException.class)
     private ResponseEntity<String> handleAccessException(AccessException e) {
+        LOGGER.error("got exception. {}", e.getErrMsg());
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getErrMsg());
     }
     

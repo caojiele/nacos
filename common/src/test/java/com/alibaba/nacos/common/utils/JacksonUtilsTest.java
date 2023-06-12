@@ -16,11 +16,14 @@
 
 package com.alibaba.nacos.common.utils;
 
+import com.alibaba.nacos.api.common.Constants;
 import com.alibaba.nacos.api.exception.runtime.NacosSerializationException;
+import com.alibaba.nacos.common.model.RestResult;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -31,8 +34,10 @@ import org.junit.Test;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.nio.charset.Charset;
 import java.util.Collections;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -427,7 +432,51 @@ public class JacksonUtilsTest {
         Assert.assertEquals("java.lang.String", JacksonUtils.constructJavaType(String.class).getRawClass().getName());
         Assert.assertTrue(JacksonUtils.constructJavaType(String.class).isFinal());
     }
+
+    @Test
+    public void testToJsonBytes() {
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
+        map.put("string", "你好，中国！");
+        map.put("integer", 999);
+        RestResult<Map<String, Object>> restResult = new RestResult();
+        restResult.setData(map);
+
+        byte[] bytes = JacksonUtils.toJsonBytes(restResult);
+        String jsonFromBytes = ByteUtils.toString(bytes);
+        Assert.assertTrue(jsonFromBytes.contains("\"code\":0"));
+        Assert.assertTrue(jsonFromBytes.contains("\"data\":{\"string\":\"你好，中国！\",\"integer\":999}"));
+        // old `toJsonBytes` method implementation:
+        //     public static byte[] toJsonBytes(Object obj) {
+        //        try {
+        //            return ByteUtils.toBytes(mapper.writeValueAsString(obj));
+        //        } catch (JsonProcessingException e) {
+        //            throw new NacosSerializationException(obj.getClass(), e);
+        //        }
+        //    }
+
+        // here is a verification to compare with the old implementation
+        byte[] bytesFromOldImplementation = ByteUtils.toBytes(JacksonUtils.toJson(restResult));
+        String jsonFromBytesOldImplementation = new String(bytesFromOldImplementation, Charset.forName(Constants.ENCODE));
+        Assert.assertTrue(jsonFromBytesOldImplementation.contains("\"code\":0"));
+        Assert.assertTrue(jsonFromBytesOldImplementation.contains("\"data\":{\"string\":\"你好，中国！\",\"integer\":999}"));
+    }
+
+    @Test
+    public void testToObjFromBytes() {
+        String json = "{\"code\":0,\"data\":{\"string\":\"你好，中国！\",\"integer\":999}}";
+
+        RestResult<Map<String, Object>> restResult = JacksonUtils.toObj(json, RestResult.class);
+        Assert.assertEquals(0, restResult.getCode());
+        Assert.assertEquals("你好，中国！", restResult.getData().get("string"));
+        Assert.assertEquals(999, restResult.getData().get("integer"));
+
+        restResult = JacksonUtils.toObj(json, new TypeReference<RestResult<Map<String, Object>>>() { });
+        Assert.assertEquals(0, restResult.getCode());
+        Assert.assertEquals("你好，中国！", restResult.getData().get("string"));
+        Assert.assertEquals(999, restResult.getData().get("integer"));
+    }
     
+    @JsonPropertyOrder({ "aLong", "aInteger", "aBoolean"})
     static class TestOfAtomicObject {
         
         public AtomicLong aLong = new AtomicLong(0);
@@ -512,6 +561,7 @@ public class JacksonUtilsTest {
         }
     }
     
+    @JsonPropertyOrder({ "value", "key" })
     static class TestOfGetter {
         
         public String getKey() {

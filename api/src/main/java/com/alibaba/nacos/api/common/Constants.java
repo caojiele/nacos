@@ -86,6 +86,10 @@ public class Constants {
     public static final String USERNAME = "username";
     
     public static final String TOKEN_REFRESH_WINDOW = "tokenRefreshWindow";
+
+    public static final Integer SDK_GRPC_PORT_DEFAULT_OFFSET = 1000;
+
+    public static final Integer CLUSTER_GRPC_PORT_DEFAULT_OFFSET = 1001;
     
     /**
      * second.
@@ -184,7 +188,7 @@ public class Constants {
     
     public static final String NULL_STRING = "null";
     
-    public static final String NUMBER_PATTERN = "^\\d+$";
+    public static final String NUMBER_PATTERN_STRING = "^\\d+$";
     
     public static final String ANY_PATTERN = ".*";
     
@@ -209,6 +213,8 @@ public class Constants {
     public static final String LOCATION_TAG = "Location-Tag";
     
     public static final String CHARSET_KEY = "charset";
+    
+    public static final String CLUSTER_NAME_PATTERN_STRING = "^[0-9a-zA-Z-]+$";
     
     /**
      * The constants in config directory.
@@ -243,8 +249,12 @@ public class Constants {
      */
     public static class Exception {
         
-        public static final int DESERIALIZE_ERROR_CODE = 101;
-        
         public static final int SERIALIZE_ERROR_CODE = 100;
+        
+        public static final int DESERIALIZE_ERROR_CODE = 101;
+    
+        public static final int FIND_DATASOURCE_ERROR_CODE = 102;
+    
+        public static final int FIND_TABLE_ERROR_CODE = 103;
     }
 }

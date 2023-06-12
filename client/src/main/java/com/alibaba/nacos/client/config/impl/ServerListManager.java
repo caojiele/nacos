@@ -19,6 +19,7 @@ package com.alibaba.nacos.client.config.impl;
 import com.alibaba.nacos.api.PropertyKeyConst;
 import com.alibaba.nacos.api.SystemPropertyKeyConst;
 import com.alibaba.nacos.api.exception.NacosException;
+import com.alibaba.nacos.client.env.NacosClientProperties;
 import com.alibaba.nacos.client.utils.ContextPathUtil;
 import com.alibaba.nacos.client.utils.EnvUtil;
 import com.alibaba.nacos.client.utils.LogUtils;
@@ -48,6 +49,9 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import static com.alibaba.nacos.common.constant.RequestUrlConstants.HTTPS_PREFIX;
+import static com.alibaba.nacos.common.constant.RequestUrlConstants.HTTP_PREFIX;
+
 /**
  * Serverlist Manager.
  *
@@ -56,10 +60,6 @@ import java.util.concurrent.TimeUnit;
 public class ServerListManager implements Closeable {
     
     private static final Logger LOGGER = LogUtils.logger(ServerListManager.class);
-    
-    private static final String HTTPS = "https://";
-    
-    private static final String HTTP = "http://";
     
     private final NacosRestTemplate nacosRestTemplate = ConfigHttpClientManager.getInstance().getNacosRestTemplate();
     
@@ -133,28 +133,28 @@ public class ServerListManager implements Closeable {
         for (String serverAddr : fixed) {
             String[] serverAddrArr = InternetAddressUtil.splitIPPortStr(serverAddr);
             if (serverAddrArr.length == 1) {
-                serverAddrs.add(serverAddrArr[0] + InternetAddressUtil.IP_PORT_SPLITER + ParamUtil.getDefaultServerPort());
+                serverAddrs
+                        .add(serverAddrArr[0] + InternetAddressUtil.IP_PORT_SPLITER + ParamUtil.getDefaultServerPort());
             } else {
                 serverAddrs.add(serverAddr);
             }
         }
         this.serverUrls = new ArrayList<>(serverAddrs);
-        if (StringUtils.isBlank(namespace)) {
-            this.name = FIXED_NAME + "-" + getFixedNameSuffix(serverAddrs.toArray(new String[serverAddrs.size()]));
-        } else {
+        if (StringUtils.isNotBlank(namespace)) {
             this.namespace = namespace;
-            this.name = FIXED_NAME + "-" + getFixedNameSuffix(serverAddrs.toArray(new String[serverAddrs.size()])) + "-"
-                    + namespace;
+            this.tenant = namespace;
         }
+        this.name = initServerName(null);
     }
     
     public ServerListManager(String host, int port) {
         this.isFixed = false;
         this.isStarted = false;
-        this.name = CUSTOM_NAME + "-" + host + "-" + port;
-        this.addressServerUrl = String
-                .format("http://%s:%d%s/%s", host, port, ContextPathUtil.normalizeContextPath(this.contentPath),
-                        this.serverListName);
+        this.endpoint = host;
+        this.endpointPort = port;
+        
+        this.name = initServerName(null);
+        initAddressServerUrl(null);
     }
     
     public ServerListManager(String endpoint) throws NacosException {
@@ -166,32 +166,31 @@ public class ServerListManager implements Closeable {
         this.isStarted = false;
         Properties properties = new Properties();
         properties.setProperty(PropertyKeyConst.ENDPOINT, endpoint);
-        endpoint = initEndpoint(properties);
+        final NacosClientProperties clientProperties = NacosClientProperties.PROTOTYPE.derive(properties);
+        this.endpoint = initEndpoint(clientProperties);
         
         if (StringUtils.isBlank(endpoint)) {
             throw new NacosException(NacosException.CLIENT_INVALID_PARAM, "endpoint is blank");
         }
-        if (StringUtils.isBlank(namespace)) {
-            this.name = endpoint;
-            this.addressServerUrl = String.format("http://%s:%d%s/%s", endpoint, this.endpointPort,
-                    ContextPathUtil.normalizeContextPath(this.contentPath), this.serverListName);
-        } else {
-            if (StringUtils.isBlank(endpoint)) {
-                throw new NacosException(NacosException.CLIENT_INVALID_PARAM, "endpoint is blank");
-            }
-            this.name = endpoint + "-" + namespace;
+        if (StringUtils.isNotBlank(namespace)) {
             this.namespace = namespace;
             this.tenant = namespace;
-            this.addressServerUrl = String.format("http://%s:%d%s/%s?namespace=%s", endpoint, this.endpointPort,
-                    ContextPathUtil.normalizeContextPath(this.contentPath), this.serverListName, namespace);
         }
+        
+        this.name = initServerName(null);
+        initAddressServerUrl(clientProperties);
     }
     
-    public ServerListManager(Properties properties) throws NacosException {
+    public ServerListManager(NacosClientProperties properties) throws NacosException {
         this.isStarted = false;
         this.serverAddrsStr = properties.getProperty(PropertyKeyConst.SERVER_ADDR);
         String namespace = properties.getProperty(PropertyKeyConst.NAMESPACE);
         initParam(properties);
+        
+        if (StringUtils.isNotBlank(namespace)) {
+            this.namespace = namespace;
+            this.tenant = namespace;
+        }
         
         if (StringUtils.isNotEmpty(serverAddrsStr)) {
             this.isFixed = true;
@@ -199,49 +198,78 @@ public class ServerListManager implements Closeable {
             StringTokenizer serverAddrsTokens = new StringTokenizer(this.serverAddrsStr, ",;");
             while (serverAddrsTokens.hasMoreTokens()) {
                 String serverAddr = serverAddrsTokens.nextToken().trim();
-                if (serverAddr.startsWith(HTTPS) || serverAddr.startsWith(HTTP)) {
+                if (serverAddr.startsWith(HTTP_PREFIX) || serverAddr.startsWith(HTTPS_PREFIX)) {
                     serverAddrs.add(serverAddr);
                 } else {
                     String[] serverAddrArr = InternetAddressUtil.splitIPPortStr(serverAddr);
                     if (serverAddrArr.length == 1) {
-                        serverAddrs.add(HTTP + serverAddrArr[0] + InternetAddressUtil.IP_PORT_SPLITER + ParamUtil
+                        serverAddrs.add(HTTP_PREFIX + serverAddrArr[0] + InternetAddressUtil.IP_PORT_SPLITER + ParamUtil
                                 .getDefaultServerPort());
                     } else {
-                        serverAddrs.add(HTTP + serverAddr);
+                        serverAddrs.add(HTTP_PREFIX + serverAddr);
                     }
                 }
             }
             this.serverUrls = serverAddrs;
-            if (StringUtils.isBlank(namespace)) {
-                this.name = FIXED_NAME + "-" + getFixedNameSuffix(
-                        this.serverUrls.toArray(new String[this.serverUrls.size()]));
-            } else {
-                this.namespace = namespace;
-                this.tenant = namespace;
-                this.name = FIXED_NAME + "-" + getFixedNameSuffix(
-                        this.serverUrls.toArray(new String[this.serverUrls.size()])) + "-" + namespace;
-            }
+            this.name = initServerName(properties);
+            
         } else {
             if (StringUtils.isBlank(endpoint)) {
                 throw new NacosException(NacosException.CLIENT_INVALID_PARAM, "endpoint is blank");
             }
             this.isFixed = false;
-            if (StringUtils.isBlank(namespace)) {
-                this.name = endpoint;
-                this.addressServerUrl = String.format("http://%s:%d%s/%s", this.endpoint, this.endpointPort,
-                        ContextPathUtil.normalizeContextPath(this.contentPath), this.serverListName);
-            } else {
-                this.namespace = namespace;
-                this.tenant = namespace;
-                this.name = this.endpoint + "-" + namespace;
-                this.addressServerUrl = String
-                        .format("http://%s:%d%s/%s?namespace=%s", this.endpoint, this.endpointPort,
-                                ContextPathUtil.normalizeContextPath(this.contentPath), this.serverListName, namespace);
-            }
+            this.name = initServerName(properties);
+            initAddressServerUrl(properties);
         }
+        
     }
     
-    private void initParam(Properties properties) {
+    private String initServerName(NacosClientProperties properties) {
+        String serverName;
+        //1.user define server name.
+        if (properties != null && properties.containsKey(PropertyKeyConst.SERVER_NAME)) {
+            serverName = properties.getProperty(PropertyKeyConst.SERVER_NAME);
+        } else {
+            // if fix url,use fix url join string.
+            if (isFixed) {
+                serverName = FIXED_NAME + "-" + (StringUtils.isNotBlank(namespace) ? (StringUtils.trim(namespace) + "-")
+                        : "") + getFixedNameSuffix(serverUrls.toArray(new String[0]));
+            } else {
+                //if use endpoint ,  use endpoint ,content path ,serverlist name
+                serverName = CUSTOM_NAME + "-" + String
+                        .join("_", endpoint, String.valueOf(endpointPort), contentPath, serverListName) + (
+                        StringUtils.isNotBlank(namespace) ? ("_" + StringUtils.trim(namespace)) : "");
+            }
+        }
+        serverName = serverName.replaceAll("\\/", "_");
+        serverName = serverName.replaceAll("\\:", "_");
+        
+        return serverName;
+    }
+    
+    private void initAddressServerUrl(NacosClientProperties properties) {
+        if (isFixed) {
+            return;
+        }
+        StringBuilder addressServerUrlTem = new StringBuilder(
+                String.format("http://%s:%d%s/%s", this.endpoint, this.endpointPort,
+                        ContextPathUtil.normalizeContextPath(this.contentPath), this.serverListName));
+        boolean hasQueryString = false;
+        if (StringUtils.isNotBlank(namespace)) {
+            addressServerUrlTem.append("?namespace=").append(namespace);
+            hasQueryString = true;
+        }
+        if (properties != null && properties.containsKey(PropertyKeyConst.ENDPOINT_QUERY_PARAMS)) {
+            addressServerUrlTem
+                    .append(hasQueryString ? "&" : "?" + properties.getProperty(PropertyKeyConst.ENDPOINT_QUERY_PARAMS));
+            
+        }
+        
+        this.addressServerUrl = addressServerUrlTem.toString();
+        LOGGER.info("serverName = {},  address server url = {}", this.name, this.addressServerUrl);
+    }
+    
+    private void initParam(NacosClientProperties properties) {
         this.endpoint = initEndpoint(properties);
         
         String contentPathTmp = properties.getProperty(PropertyKeyConst.CONTEXT_PATH);
@@ -254,10 +282,10 @@ public class ServerListManager implements Closeable {
         }
     }
     
-    private String initEndpoint(final Properties properties) {
+    private String initEndpoint(final NacosClientProperties properties) {
         
         String endpointPortTmp = TemplateUtils
-                .stringEmptyAndThenExecute(System.getenv(PropertyKeyConst.SystemEnv.ALIBABA_ALIWARE_ENDPOINT_PORT),
+                .stringEmptyAndThenExecute(properties.getProperty(PropertyKeyConst.SystemEnv.ALIBABA_ALIWARE_ENDPOINT_PORT),
                         () -> properties.getProperty(PropertyKeyConst.ENDPOINT_PORT));
         
         if (StringUtils.isNotBlank(endpointPortTmp)) {
@@ -268,7 +296,7 @@ public class ServerListManager implements Closeable {
         
         // Whether to enable domain name resolution rules
         String isUseEndpointRuleParsing = properties.getProperty(PropertyKeyConst.IS_USE_ENDPOINT_PARSING_RULE,
-                System.getProperty(SystemPropertyKeyConst.IS_USE_ENDPOINT_PARSING_RULE,
+                properties.getProperty(SystemPropertyKeyConst.IS_USE_ENDPOINT_PARSING_RULE,
                         String.valueOf(ParamUtil.USE_ENDPOINT_PARSING_RULE_DEFAULT_VALUE)));
         if (Boolean.parseBoolean(isUseEndpointRuleParsing)) {
             String endpointUrl = ParamUtil.parsingEndpointRule(endpointTmp);
@@ -362,10 +390,10 @@ public class ServerListManager implements Closeable {
         
         List<String> newServerAddrList = new ArrayList<>();
         for (String server : newList) {
-            if (server.startsWith(HTTP) || server.startsWith(HTTPS)) {
+            if (server.startsWith(HTTP_PREFIX) || server.startsWith(HTTPS_PREFIX)) {
                 newServerAddrList.add(server);
             } else {
-                newServerAddrList.add(HTTP + server);
+                newServerAddrList.add(HTTP_PREFIX + server);
             }
         }
         

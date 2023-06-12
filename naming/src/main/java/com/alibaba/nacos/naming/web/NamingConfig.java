@@ -36,13 +36,15 @@ public class NamingConfig {
     
     private static final String TRAFFIC_REVISE_FILTER = "trafficReviseFilter";
     
+    private static final String CLIENT_ATTRIBUTES_FILTER = "clientAttributes_filter";
+    
     @Bean
     public FilterRegistrationBean distroFilterRegistration() {
         FilterRegistrationBean<DistroFilter> registration = new FilterRegistrationBean<>();
         registration.setFilter(distroFilter());
         registration.addUrlPatterns(UTL_PATTERNS);
         registration.setName(DISTRO_FILTER);
-        registration.setOrder(6);
+        registration.setOrder(7);
         return registration;
     }
     
@@ -67,6 +69,16 @@ public class NamingConfig {
     }
     
     @Bean
+    public FilterRegistrationBean clientAttributesFilterRegistration() {
+        FilterRegistrationBean<ClientAttributesFilter> registration = new FilterRegistrationBean<>();
+        registration.setFilter(clientAttributesFilter());
+        registration.addUrlPatterns(UTL_PATTERNS);
+        registration.setName(CLIENT_ATTRIBUTES_FILTER);
+        registration.setOrder(8);
+        return registration;
+    }
+    
+    @Bean
     public DistroFilter distroFilter() {
         return new DistroFilter();
     }
@@ -81,4 +93,8 @@ public class NamingConfig {
         return new ServiceNameFilter();
     }
     
+    @Bean
+    public ClientAttributesFilter clientAttributesFilter() {
+        return new ClientAttributesFilter();
+    }
 }

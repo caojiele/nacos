@@ -22,22 +22,19 @@ import com.alibaba.nacos.api.naming.CommonParams;
 import com.alibaba.nacos.api.naming.pojo.healthcheck.AbstractHealthChecker;
 import com.alibaba.nacos.api.naming.pojo.healthcheck.HealthCheckType;
 import com.alibaba.nacos.auth.annotation.Secured;
-import com.alibaba.nacos.auth.common.ActionTypes;
 import com.alibaba.nacos.common.utils.ConvertUtils;
 import com.alibaba.nacos.common.utils.JacksonUtils;
+import com.alibaba.nacos.common.utils.StringUtils;
 import com.alibaba.nacos.core.utils.WebUtils;
 import com.alibaba.nacos.naming.core.HealthOperator;
-import com.alibaba.nacos.naming.core.HealthOperatorV1Impl;
 import com.alibaba.nacos.naming.core.HealthOperatorV2Impl;
-import com.alibaba.nacos.naming.core.v2.upgrade.UpgradeJudgement;
 import com.alibaba.nacos.naming.misc.Loggers;
 import com.alibaba.nacos.naming.misc.UtilsAndCommons;
 import com.alibaba.nacos.naming.monitor.MetricsMonitor;
 import com.alibaba.nacos.naming.web.CanDistro;
-import com.alibaba.nacos.naming.web.NamingResourceParser;
+import com.alibaba.nacos.plugin.auth.constant.ActionTypes;
 import com.alibaba.nacos.sys.env.EnvUtil;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.alibaba.nacos.common.utils.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -67,13 +64,7 @@ import static com.alibaba.nacos.naming.constants.RequestConstant.VALID_KEY;
 public class HealthController {
     
     @Autowired
-    private HealthOperatorV1Impl healthOperatorV1;
-    
-    @Autowired
     private HealthOperatorV2Impl healthOperatorV2;
-    
-    @Autowired
-    private UpgradeJudgement upgradeJudgement;
     
     /**
      * Just a health check.
@@ -96,7 +87,7 @@ public class HealthController {
      */
     @CanDistro
     @PutMapping(value = {"", "/instance"})
-    @Secured(action = ActionTypes.WRITE, parser = NamingResourceParser.class)
+    @Secured(action = ActionTypes.WRITE)
     public ResponseEntity update(HttpServletRequest request) throws NacosException {
         String healthyString = WebUtils.optional(request, HEALTHY_KEY, StringUtils.EMPTY);
         if (StringUtils.isBlank(healthyString)) {
@@ -138,6 +129,6 @@ public class HealthController {
     }
     
     private HealthOperator getHealthOperator() {
-        return upgradeJudgement.isUseGrpcFeatures() ? healthOperatorV2 : healthOperatorV1;
+        return healthOperatorV2;
     }
 }

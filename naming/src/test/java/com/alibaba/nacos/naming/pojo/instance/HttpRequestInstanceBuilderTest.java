@@ -29,8 +29,6 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 
 import javax.servlet.http.HttpServletRequest;
-import java.util.HashMap;
-import java.util.Map;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertFalse;
@@ -80,22 +78,13 @@ public class HttpRequestInstanceBuilderTest {
         assertTrue(actual.isHealthy());
         assertThat(actual.getInstanceId(),
                 is(IP + "#" + PORT + "#" + UtilsAndCommons.DEFAULT_CLUSTER_NAME + "#" + SERVICE));
-        assertThat(actual.getMetadata().size(), is(2));
-        assertThat(actual.getMetadata().get("app"), is("DEFAULT"));
+        assertThat(actual.getMetadata().size(), is(1));
         assertThat(actual.getMetadata().get("mock"), is("mock"));
         verify(request).getParameter("mock");
     }
     
     @Test
     public void testBuildFull() throws NacosException {
-        Map<String, String[]> mockMap = new HashMap<>();
-        mockMap.put("weight", new String[] {""});
-        mockMap.put("healthy", new String[] {""});
-        mockMap.put("enabled", new String[] {""});
-        mockMap.put("ephemeral", new String[] {""});
-        mockMap.put("metadata", new String[] {""});
-        mockMap.put(CommonParams.CLUSTER_NAME, new String[] {""});
-        when(request.getParameterMap()).thenReturn(mockMap);
         when(request.getParameter("weight")).thenReturn("2");
         when(request.getParameter("healthy")).thenReturn("false");
         when(request.getParameter("enabled")).thenReturn("false");
@@ -112,18 +101,14 @@ public class HttpRequestInstanceBuilderTest {
         assertFalse(actual.isEnabled());
         assertFalse(actual.isHealthy());
         assertThat(actual.getInstanceId(), is(IP + "#" + PORT + "#" + "cluster" + "#" + SERVICE));
-        assertThat(actual.getMetadata().size(), is(3));
+        assertThat(actual.getMetadata().size(), is(2));
         assertThat(actual.getMetadata().get("mock"), is("mock"));
-        assertThat(actual.getMetadata().get("app"), is("DEFAULT"));
         assertThat(actual.getMetadata().get("a"), is("b"));
         verify(request).getParameter("mock");
     }
     
     @Test(expected = NacosException.class)
     public void testBuildWithIllegalWeight() throws NacosException {
-        Map<String, String[]> mockMap = new HashMap<>();
-        mockMap.put("weight", new String[] {""});
-        when(request.getParameterMap()).thenReturn(mockMap);
         when(request.getParameter("weight")).thenReturn("10001");
         Instance actual = builder.setRequest(request).build();
     }

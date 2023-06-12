@@ -34,7 +34,6 @@ public class NetUtilsTest {
         field.setAccessible(true);
         field.set(null, "");
         System.clearProperty("com.alibaba.nacos.client.local.ip");
-        System.clearProperty("com.alibaba.nacos.client.naming.local.ip");
         System.clearProperty("com.alibaba.nacos.client.local.preferHostname");
     }
 
@@ -46,12 +45,6 @@ public class NetUtilsTest {
     }
 
     @Test
-    public void testCompatibleLocalIP() {
-        System.setProperty("com.alibaba.nacos.client.naming.local.ip", "10.2.7.8");
-        assertEquals("10.2.7.8", NetUtils.localIP());
-    }
-
-    @Test
     public void testPreferHostname() throws Exception {
         Class<?> clazz = Class.forName("com.alibaba.nacos.api.utils.NetUtils");
         Method method = clazz.getDeclaredMethod("findFirstNonLoopbackAddress");
@@ -60,6 +53,7 @@ public class NetUtilsTest {
         String hostname = inetAddress.getHostName();
 
         System.setProperty("com.alibaba.nacos.client.local.preferHostname", "true");
+        assertEquals(hostname, NetUtils.localIP());
         assertEquals(hostname, NetUtils.localIP());
     }
 

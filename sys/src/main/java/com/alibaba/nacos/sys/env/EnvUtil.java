@@ -20,10 +20,12 @@ import com.alibaba.nacos.common.JustForTest;
 import com.alibaba.nacos.common.utils.IoUtils;
 import com.alibaba.nacos.common.utils.StringUtils;
 import com.alibaba.nacos.common.utils.ThreadUtils;
+import com.alibaba.nacos.plugin.environment.CustomEnvironmentPluginManager;
 import com.alibaba.nacos.sys.utils.DiskUtils;
 import com.alibaba.nacos.sys.utils.InetUtils;
-import com.sun.management.OperatingSystemMXBean;
 import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.core.env.MapPropertySource;
+import org.springframework.core.env.MutablePropertySources;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 
@@ -34,7 +36,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
-import java.lang.management.ManagementFactory;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -42,6 +43,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.HashMap;
 
 /**
  * Its own configuration information manipulation tool class.
@@ -63,7 +66,7 @@ public class EnvUtil {
      */
     public static final String NACOS_HOME_KEY = "nacos.home";
     
-    private static String localAddress = "";
+    private static volatile String localAddress = "";
     
     private static int port = -1;
     
@@ -87,7 +90,7 @@ public class EnvUtil {
     
     private static final String CUSTOM_CONFIG_LOCATION_PROPERTY = "spring.config.additional-location";
     
-    private static final String DEFAULT_CONFIG_LOCATION  = "application.properties";
+    private static final String DEFAULT_CONFIG_LOCATION = "application.properties";
     
     private static final String DEFAULT_RESOURCE_PATH = "/application.properties";
     
@@ -100,18 +103,36 @@ public class EnvUtil {
     private static final String NACOS_TEMP_DIR_1 = "data";
     
     private static final String NACOS_TEMP_DIR_2 = "tmp";
-    
+
+    private static final String NACOS_CUSTOM_ENVIRONMENT_ENABLED = "nacos.custom.environment.enabled";
+
+    private static final String NACOS_CUSTOM_CONFIG_NAME = "customFirstNacosConfig";
+
     @JustForTest
     private static String confPath = "";
     
     @JustForTest
     private static String nacosHomePath = null;
     
-    private static final OperatingSystemMXBean OPERATING_SYSTEM_MX_BEAN = (com.sun.management.OperatingSystemMXBean) ManagementFactory
-            .getOperatingSystemMXBean();
-    
     private static ConfigurableEnvironment environment;
-    
+
+    /**
+     * customEnvironment.
+     */
+    public static void customEnvironment() {
+        boolean enableCustom = getProperty(NACOS_CUSTOM_ENVIRONMENT_ENABLED, Boolean.class, false);
+        if (enableCustom) {
+            Set<String> propertyKeys = CustomEnvironmentPluginManager.getInstance().getPropertyKeys();
+            Map<String, Object> sourcePropertyMap = new HashMap<>(propertyKeys.size());
+            for (String key : propertyKeys) {
+                sourcePropertyMap.put(key, getProperty(key, Object.class));
+            }
+            Map<String, Object> targetMap = CustomEnvironmentPluginManager.getInstance().getCustomValues(sourcePropertyMap);
+            MutablePropertySources propertySources = environment.getPropertySources();
+            propertySources.addFirst(new MapPropertySource(NACOS_CUSTOM_CONFIG_NAME, targetMap));
+        }
+    }
+
     public static ConfigurableEnvironment getEnvironment() {
         return environment;
     }
@@ -245,7 +266,8 @@ public class EnvUtil {
         if (StringUtils.isBlank(nacosHomePath)) {
             String nacosHome = System.getProperty(NACOS_HOME_KEY);
             if (StringUtils.isBlank(nacosHome)) {
-                nacosHome = Paths.get(System.getProperty(NACOS_HOME_PROPERTY), NACOS_HOME_ADDITIONAL_FILEPATH).toString();
+                nacosHome = Paths.get(System.getProperty(NACOS_HOME_PROPERTY), NACOS_HOME_ADDITIONAL_FILEPATH)
+                        .toString();
             }
             return nacosHome;
         }
@@ -272,18 +294,16 @@ public class EnvUtil {
     }
     
     public static float getLoad() {
-        return (float) OPERATING_SYSTEM_MX_BEAN.getSystemLoadAverage();
+        return (float) OperatingSystemBeanManager.getOperatingSystemBean().getSystemLoadAverage();
     }
     
-    @SuppressWarnings("checkstyle:AbbreviationAsWordInName")
-    public static float getCPU() {
-        return (float) OPERATING_SYSTEM_MX_BEAN.getSystemCpuLoad();
+    public static float getCpu() {
+        return (float) OperatingSystemBeanManager.getSystemCpuUsage();
     }
     
     public static float getMem() {
-        return (float) (1
-                - (double) OPERATING_SYSTEM_MX_BEAN.getFreePhysicalMemorySize() / (double) OPERATING_SYSTEM_MX_BEAN
-                .getTotalPhysicalMemorySize());
+        return (float) (1 - OperatingSystemBeanManager.getFreePhysicalMem() / OperatingSystemBeanManager
+                .getTotalPhysicalMem());
     }
     
     public static String getConfPath() {
@@ -420,8 +440,8 @@ public class EnvUtil {
      * Get available processor numbers from environment.
      *
      * <p>
-     *     If there are setting of {@code nacos.core.sys.basic.processors} in config/JVM/system, use it.
-     *     If no setting, use the one time {@code ThreadUtils.getSuitableThreadCount()}.
+     * If there are setting of {@code nacos.core.sys.basic.processors} in config/JVM/system, use it. If no setting, use
+     * the one time {@code ThreadUtils.getSuitableThreadCount()}.
      * </p>
      *
      * @return available processor numbers from environment, will not lower than 1.
@@ -456,8 +476,9 @@ public class EnvUtil {
         if (scale < 0 || scale > 1) {
             throw new IllegalArgumentException("processors scale must between 0 and 1");
         }
-        double result = getProperty(Constants.AVAILABLE_PROCESSORS_BASIC, int.class,
-                ThreadUtils.getSuitableThreadCount(1)) * scale;
+        double result =
+                getProperty(Constants.AVAILABLE_PROCESSORS_BASIC, int.class, ThreadUtils.getSuitableThreadCount(1))
+                        * scale;
         return result > 1 ? (int) result : 1;
     }
 }

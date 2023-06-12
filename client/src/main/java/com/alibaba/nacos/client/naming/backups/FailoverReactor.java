@@ -31,7 +31,10 @@ import com.alibaba.nacos.common.utils.ThreadUtils;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.StringReader;
+import java.net.URLDecoder;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
@@ -40,7 +43,6 @@ import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
 import static com.alibaba.nacos.client.utils.LogUtils.NAMING_LOGGER;
@@ -60,9 +62,9 @@ public class FailoverReactor implements Closeable {
     
     private static final String FAILOVER_MODE_PARAM = "failover-mode";
     
-    private Map<String, ServiceInfo> serviceMap = new ConcurrentHashMap<String, ServiceInfo>();
+    private Map<String, ServiceInfo> serviceMap = new ConcurrentHashMap<>();
     
-    private final Map<String, String> switchParams = new ConcurrentHashMap<String, String>();
+    private final Map<String, String> switchParams = new ConcurrentHashMap<>();
     
     private static final long DAY_PERIOD_MINUTES = 24 * 60;
     
@@ -76,14 +78,11 @@ public class FailoverReactor implements Closeable {
         this.serviceInfoHolder = serviceInfoHolder;
         this.failoverDir = cacheDir + FAILOVER_DIR;
         // init executorService
-        this.executorService = new ScheduledThreadPoolExecutor(1, new ThreadFactory() {
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread thread = new Thread(r);
-                thread.setDaemon(true);
-                thread.setName("com.alibaba.nacos.naming.failover");
-                return thread;
-            }
+        this.executorService = new ScheduledThreadPoolExecutor(1, r -> {
+            Thread thread = new Thread(r);
+            thread.setDaemon(true);
+            thread.setName("com.alibaba.nacos.naming.failover");
+            return thread;
         });
         this.init();
     }
@@ -98,25 +97,22 @@ public class FailoverReactor implements Closeable {
         executorService.scheduleWithFixedDelay(new DiskFileWriter(), 30, DAY_PERIOD_MINUTES, TimeUnit.MINUTES);
         
         // backup file on startup if failover directory is empty.
-        executorService.schedule(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    File cacheDir = new File(failoverDir);
-                    
-                    if (!cacheDir.exists() && !cacheDir.mkdirs()) {
-                        throw new IllegalStateException("failed to create cache dir: " + failoverDir);
-                    }
-                    
-                    File[] files = cacheDir.listFiles();
-                    if (files == null || files.length <= 0) {
-                        new DiskFileWriter().run();
-                    }
-                } catch (Throwable e) {
-                    NAMING_LOGGER.error("[NA] failed to backup file on startup.", e);
+        executorService.schedule(() -> {
+            try {
+                File cacheDir = new File(failoverDir);
+
+                if (!cacheDir.exists() && !cacheDir.mkdirs()) {
+                    throw new IllegalStateException("failed to create cache dir: " + failoverDir);
                 }
-                
+
+                File[] files = cacheDir.listFiles();
+                if (files == null || files.length <= 0) {
+                    new DiskFileWriter().run();
+                }
+            } catch (Throwable e) {
+                NAMING_LOGGER.error("[NA] failed to backup file on startup.", e);
             }
+
         }, 10000L, TimeUnit.MILLISECONDS);
     }
     
@@ -149,7 +145,7 @@ public class FailoverReactor implements Closeable {
         @Override
         public void run() {
             try {
-                File switchFile = new File(failoverDir + UtilAndComs.FAILOVER_SWITCH);
+                File switchFile = Paths.get(failoverDir, UtilAndComs.FAILOVER_SWITCH).toFile();
                 if (!switchFile.exists()) {
                     switchParams.put(FAILOVER_MODE_PARAM, Boolean.FALSE.toString());
                     NAMING_LOGGER.debug("failover switch is not found, {}", switchFile.getName());
@@ -191,7 +187,7 @@ public class FailoverReactor implements Closeable {
         
         @Override
         public void run() {
-            Map<String, ServiceInfo> domMap = new HashMap<String, ServiceInfo>(16);
+            Map<String, ServiceInfo> domMap = new HashMap<>(16);
             
             BufferedReader reader = null;
             try {
@@ -215,11 +211,12 @@ public class FailoverReactor implements Closeable {
                         continue;
                     }
                     
-                    ServiceInfo dom = new ServiceInfo(file.getName());
+                    ServiceInfo dom = null;
                     
                     try {
-                        String dataString = ConcurrentDiskUtil
-                                .getFileContent(file, Charset.defaultCharset().toString());
+                        dom = new ServiceInfo(URLDecoder.decode(file.getName(), StandardCharsets.UTF_8.name()));
+                        String dataString = ConcurrentDiskUtil.getFileContent(file,
+                                Charset.defaultCharset().toString());
                         reader = new BufferedReader(new StringReader(dataString));
                         
                         String json;
@@ -242,7 +239,7 @@ public class FailoverReactor implements Closeable {
                             //ignore
                         }
                     }
-                    if (!CollectionUtils.isEmpty(dom.getHosts())) {
+                    if (dom != null && !CollectionUtils.isEmpty(dom.getHosts())) {
                         domMap.put(dom.getKey(), dom);
                     }
                 }

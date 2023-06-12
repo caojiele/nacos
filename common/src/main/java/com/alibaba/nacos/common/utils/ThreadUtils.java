@@ -29,6 +29,9 @@ import java.util.concurrent.TimeUnit;
  * @author <a href="mailto:liaochuntao@live.com">liaochuntao</a>
  */
 public final class ThreadUtils {
+
+    private ThreadUtils() {
+    }
     
     private static final int THREAD_MULTIPLER = 2;
     
@@ -107,7 +110,7 @@ public final class ThreadUtils {
      * @return thread count
      */
     public static int getSuitableThreadCount(int threadMultiple) {
-        final int coreCount = Runtime.getRuntime().availableProcessors();
+        final int coreCount = PropertyUtils.getProcessorsCount();
         int workerCount = 1;
         while (workerCount < coreCount * threadMultiple) {
             workerCount <<= 1;

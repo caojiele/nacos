@@ -29,17 +29,13 @@
     <packaging>pom</packaging>
 
     <name>nacos-test ${project.version}</name>
-    <url>http://nacos.io</url>
+    <url>https://nacos.io</url>
     <modules>
         <module>config-test</module>
         <module>naming-test</module>
         <module>core-test</module>
     </modules>
     
-    <properties>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    </properties>
-
     <dependencies>
 
         <dependency>
@@ -53,11 +49,6 @@
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-core</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.google.truth</groupId>
-            <artifactId>truth</artifactId>
         </dependency>
 
         <dependency>
@@ -103,10 +94,15 @@
             <artifactId>spring-boot-test</artifactId>
             <scope>test</scope>
         </dependency>
-
+    
         <dependency>
-            <groupId>com.github.keran213539</groupId>
-            <artifactId>commonOkHttp</artifactId>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpclient</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpmime</artifactId>
             <scope>test</scope>
         </dependency>
 
