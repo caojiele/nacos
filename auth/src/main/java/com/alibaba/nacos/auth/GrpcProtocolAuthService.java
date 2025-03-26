@@ -18,6 +18,7 @@ package com.alibaba.nacos.auth;
 
 import com.alibaba.nacos.api.remote.request.Request;
 import com.alibaba.nacos.auth.annotation.Secured;
+import com.alibaba.nacos.auth.serveridentity.ServerIdentity;
 import com.alibaba.nacos.plugin.auth.api.IdentityContext;
 import com.alibaba.nacos.plugin.auth.api.Resource;
 import com.alibaba.nacos.auth.config.AuthConfigs;
@@ -51,6 +52,7 @@ public class GrpcProtocolAuthService extends AbstractProtocolAuthService<Request
     
     @Override
     public void initialize() {
+        super.initialize();
         resourceParserMap.put(SignType.NAMING, new NamingGrpcResourceParser());
         resourceParserMap.put(SignType.CONFIG, new ConfigGrpcResourceParser());
     }
@@ -61,15 +63,23 @@ public class GrpcProtocolAuthService extends AbstractProtocolAuthService<Request
             return parseSpecifiedResource(secured);
         }
         String type = secured.signType();
-        if (!resourceParserMap.containsKey(type)) {
+        AbstractGrpcResourceParser parser = resourceParserMap.get(type);
+        if (parser == null) {
             Loggers.AUTH.warn("Can't find Grpc request resourceParser for type {}", type);
             return useSpecifiedParserToParse(secured, request);
         }
-        return resourceParserMap.get(type).parse(request, secured);
+        return parser.parse(request, secured);
     }
     
     @Override
     public IdentityContext parseIdentity(Request request) {
         return identityContextBuilder.build(request);
+    }
+    
+    @Override
+    protected ServerIdentity parseServerIdentity(Request request) {
+        String serverIdentityKey = authConfigs.getServerIdentityKey();
+        String serverIdentity = request.getHeader(serverIdentityKey);
+        return new ServerIdentity(serverIdentityKey, serverIdentity);
     }
 }

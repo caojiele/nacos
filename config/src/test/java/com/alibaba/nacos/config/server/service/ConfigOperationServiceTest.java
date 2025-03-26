@@ -18,26 +18,31 @@ package com.alibaba.nacos.config.server.service;
 
 import com.alibaba.nacos.api.exception.NacosException;
 import com.alibaba.nacos.config.server.model.ConfigInfo;
+import com.alibaba.nacos.config.server.model.ConfigOperateResult;
 import com.alibaba.nacos.config.server.model.ConfigRequestInfo;
 import com.alibaba.nacos.config.server.model.form.ConfigForm;
-import com.alibaba.nacos.config.server.service.repository.ConfigInfoBetaPersistService;
+import com.alibaba.nacos.config.server.service.repository.ConfigInfoGrayPersistService;
 import com.alibaba.nacos.config.server.service.repository.ConfigInfoPersistService;
-import com.alibaba.nacos.config.server.service.repository.ConfigInfoTagPersistService;
 import com.alibaba.nacos.sys.env.EnvUtil;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.env.StandardEnvironment;
+import org.springframework.dao.DataIntegrityViolationException;
 
-import java.sql.Timestamp;
-
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * ConfigServiceTest.
@@ -46,8 +51,8 @@ import static org.mockito.Mockito.verify;
  * @date 2022/8/11
  */
 
-@RunWith(MockitoJUnitRunner.class)
-public class ConfigOperationServiceTest {
+@ExtendWith(MockitoExtension.class)
+class ConfigOperationServiceTest {
     
     private ConfigOperationService configOperationService;
     
@@ -55,20 +60,20 @@ public class ConfigOperationServiceTest {
     private ConfigInfoPersistService configInfoPersistService;
     
     @Mock
-    private ConfigInfoTagPersistService configInfoTagPersistService;
+    private ConfigInfoGrayPersistService configInfoGrayPersistService;
     
     @Mock
-    private ConfigInfoBetaPersistService configInfoBetaPersistService;
+    ConfigGrayModelMigrateService configGrayModelMigrateService;
     
-    @Before
-    public void setUp() throws Exception {
+    @BeforeEach
+    void setUp() throws Exception {
         EnvUtil.setEnvironment(new StandardEnvironment());
-        this.configOperationService = new ConfigOperationService(configInfoPersistService, configInfoTagPersistService,
-                configInfoBetaPersistService);
+        this.configOperationService = new ConfigOperationService(configInfoPersistService, configInfoGrayPersistService,
+                configGrayModelMigrateService);
     }
     
     @Test
-    public void testPublishConfig() throws NacosException {
+    void testPublishConfigBeta() throws NacosException {
         ConfigForm configForm = new ConfigForm();
         configForm.setDataId("test");
         configForm.setGroup("test");
@@ -76,41 +81,184 @@ public class ConfigOperationServiceTest {
         
         ConfigRequestInfo configRequestInfo = new ConfigRequestInfo();
         
-        // if betaIps is blank and tag is blank
-        Boolean aResult = configOperationService.publishConfig(configForm, configRequestInfo, "");
-        verify(configInfoPersistService)
-                .insertOrUpdate(any(), any(), any(ConfigInfo.class), any(Timestamp.class), any(), anyBoolean());
-        Assert.assertEquals(true, aResult);
+        configRequestInfo.setCasMd5("");
+        configForm.setTag("");
         
-        // if betaIps is blank and tag is not blank
-        configForm.setTag("test tag");
-        Boolean bResult = configOperationService.publishConfig(configForm, configRequestInfo, "");
-        verify(configInfoTagPersistService)
-                .insertOrUpdateTag(any(ConfigInfo.class), eq("test tag"), any(), any(), any(Timestamp.class),
-                        anyBoolean());
-        Assert.assertEquals(true, bResult);
-        
-        // if betaIps is not blank
+        // if betaIps is not blank and casMd5 is blank
         configRequestInfo.setBetaIps("test-betaIps");
-        Boolean cResult = configOperationService.publishConfig(configForm, configRequestInfo, "");
-        verify(configInfoBetaPersistService)
-                .insertOrUpdateBeta(any(ConfigInfo.class), eq("test-betaIps"), any(), any(), any(Timestamp.class),
-                        anyBoolean());
-        Assert.assertEquals(true, cResult);
+        
+        when(configInfoGrayPersistService.insertOrUpdateGray(any(ConfigInfo.class), eq("beta"), anyString(),
+                eq(configRequestInfo.getSrcIp()), eq(configForm.getSrcUser()))).thenReturn(new ConfigOperateResult());
+        Boolean eResult = configOperationService.publishConfig(configForm, configRequestInfo, "");
+        assertTrue(eResult);
+        
     }
     
     @Test
-    public void testDeleteConfig() {
+    void testPublishConfigBetaCas() throws NacosException {
+        ConfigForm configForm = new ConfigForm();
+        configForm.setDataId("test");
+        configForm.setGroup("test");
+        configForm.setContent("test content");
+        
+        ConfigRequestInfo configRequestInfo = new ConfigRequestInfo();
+        
+        configRequestInfo.setCasMd5("casMd5");
+        configForm.setTag("");
+        
+        // if betaIps is not blank and casMd5 is not blank
+        configRequestInfo.setBetaIps("test-betaIps");
+        configRequestInfo.setCasMd5("test casMd5");
+        
+        when(configInfoGrayPersistService.insertOrUpdateGrayCas(any(ConfigInfo.class), eq("beta"), anyString(),
+                eq(configRequestInfo.getSrcIp()), eq(configForm.getSrcUser()))).thenReturn(new ConfigOperateResult());
+        Boolean fResult = configOperationService.publishConfig(configForm, configRequestInfo, "");
+        assertTrue(fResult);
+    }
+    
+    @Test
+    void testPublishConfigTag() throws NacosException {
+        ConfigForm configForm = new ConfigForm();
+        configForm.setDataId("test");
+        configForm.setGroup("test");
+        configForm.setContent("test content");
+        
+        ConfigRequestInfo configRequestInfo = new ConfigRequestInfo();
+        
+        configRequestInfo.setCasMd5("");
+        String tag = "testTag";
+        configForm.setTag(tag);
+        
+        when(configInfoGrayPersistService.insertOrUpdateGray(any(ConfigInfo.class), eq("tag_" + tag), anyString(),
+                eq(configRequestInfo.getSrcIp()), eq(configForm.getSrcUser()))).thenReturn(new ConfigOperateResult());
+        Boolean cResult = configOperationService.publishConfig(configForm, configRequestInfo, "");
+        assertTrue(cResult);
+        
+    }
+    
+    @Test
+    void testPublishConfigTagCas() throws NacosException {
+        ConfigForm configForm = new ConfigForm();
+        configForm.setDataId("test");
+        configForm.setGroup("test");
+        configForm.setContent("test content");
+        
+        ConfigRequestInfo configRequestInfo = new ConfigRequestInfo();
+        
+        configRequestInfo.setCasMd5("casMd5");
+        String tag = "testTag";
+        configForm.setTag(tag);
+        
+        when(configInfoGrayPersistService.insertOrUpdateGrayCas(any(ConfigInfo.class), eq("tag_" + tag), anyString(),
+                eq(configRequestInfo.getSrcIp()), eq(configForm.getSrcUser()))).thenReturn(new ConfigOperateResult());
+        Boolean dResult = configOperationService.publishConfig(configForm, configRequestInfo, "");
+        assertTrue(dResult);
+    }
+    
+    @Test
+    void testPublishConfig() throws NacosException {
+        ConfigForm configForm = new ConfigForm();
+        configForm.setDataId("test");
+        configForm.setGroup("test");
+        configForm.setContent("test content");
+        
+        ConfigRequestInfo configRequestInfo = new ConfigRequestInfo();
+        
+        // if betaIps is blank, tag is blank and casMd5 is blank
+        when(configInfoPersistService.insertOrUpdate(any(), any(), any(ConfigInfo.class), any())).thenReturn(
+                new ConfigOperateResult());
+        Boolean aResult = configOperationService.publishConfig(configForm, configRequestInfo, "");
+        verify(configInfoPersistService).insertOrUpdate(any(), any(), any(ConfigInfo.class), any());
+        assertTrue(aResult);
+        
+        // if betaIps is blank, tag is blank and casMd5 is not blank
+        configRequestInfo.setCasMd5("test casMd5");
+        when(configInfoPersistService.insertOrUpdateCas(any(), any(), any(ConfigInfo.class), any())).thenReturn(
+                new ConfigOperateResult());
+        Boolean bResult = configOperationService.publishConfig(configForm, configRequestInfo, "");
+        verify(configInfoPersistService).insertOrUpdateCas(any(), any(), any(ConfigInfo.class), any());
+        assertTrue(bResult);
+        configRequestInfo.setCasMd5("");
+    }
+    
+    @Test
+    void testUpdateForExistTrue() throws Exception {
+        ConfigForm configForm = new ConfigForm();
+        configForm.setDataId("testDataId");
+        configForm.setGroup("testGroup");
+        configForm.setNamespaceId("testNamespaceId");
+        
+        ConfigRequestInfo configRequestInfo = new ConfigRequestInfo();
+        configRequestInfo.setSrcType("http");
+        configRequestInfo.setSrcIp("1.1.1.1");
+        
+        when(configInfoPersistService.insertOrUpdate(anyString(), isNull(), any(ConfigInfo.class), anyMap()))
+                .thenReturn(new ConfigOperateResult(true));
+
+        Boolean result = configOperationService.publishConfig(configForm, configRequestInfo, "encryptedKey");
+        assertTrue(result);
+        verify(configInfoPersistService, times(1)).insertOrUpdate(anyString(), isNull(), any(ConfigInfo.class), anyMap());
+    }
+    
+    @Test
+    void testAddConfigInfoSuccess() throws Exception {
+        ConfigForm configForm = new ConfigForm();
+        configForm.setDataId("testDataId");
+        configForm.setGroup("testGroup");
+        configForm.setNamespaceId("testNamespaceId");
+        
+        ConfigRequestInfo configRequestInfo = new ConfigRequestInfo();
+        configRequestInfo.setSrcType("http");
+        configRequestInfo.setSrcIp("1.1.1.1");
+        configRequestInfo.setUpdateForExist(false);
+        
+        when(configInfoPersistService.addConfigInfo(anyString(), isNull(), any(ConfigInfo.class), anyMap()))
+                .thenReturn(new ConfigOperateResult(true));
+        
+        Boolean result = configOperationService.publishConfig(configForm, configRequestInfo, "encryptedKey");
+        
+        assertTrue(result);
+        verify(configInfoPersistService, times(1)).addConfigInfo(anyString(), isNull(), any(ConfigInfo.class), anyMap());
+    }
+    
+    @Test
+    void testAddConfigInfoThrowsException() {
+        ConfigForm configForm = new ConfigForm();
+        configForm.setDataId("testDataId");
+        configForm.setGroup("testGroup");
+        configForm.setNamespaceId("testNamespaceId");
+        
+        ConfigRequestInfo configRequestInfo = new ConfigRequestInfo();
+        configRequestInfo.setSrcType("http");
+        configRequestInfo.setSrcIp("1.1.1.1");
+        configRequestInfo.setUpdateForExist(false);
+        
+        ConfigInfo configInfo = new ConfigInfo();
+        configInfo.setDataId("testDataId");
+        configInfo.setGroup("testGroup");
+        configInfo.setTenant("testNamespaceId");
+        
+        when(configInfoPersistService.addConfigInfo(eq("1.1.1.1"), isNull(), eq(configInfo), anyMap()))
+                .thenThrow(new DataIntegrityViolationException("Duplicate entry"));
+        
+        NacosException exception = assertThrows(NacosException.class, () -> {
+            configOperationService.publishConfig(configForm, configRequestInfo, "encryptedKey");
+        });
+        
+        String expectedMessage = "config already exist, dataId: testDataId, group: testGroup, namespaceId: testNamespaceId";
+        assertEquals(expectedMessage, exception.getMessage());
+        verify(configInfoPersistService, times(1)).addConfigInfo(anyString(), isNull(), eq(configInfo), anyMap());
+    }
+    
+    @Test
+    void testDeleteConfig() {
         
         // if tag is blank
-        Boolean aResult = configOperationService.deleteConfig("test", "test", "", "", "1.1.1.1", "test");
+        Boolean aResult = configOperationService.deleteConfig("test", "test", "", "", "1.1.1.1", "test", "http");
         verify(configInfoPersistService).removeConfigInfo(eq("test"), eq("test"), eq(""), any(), any());
-        Assert.assertEquals(true, aResult);
-        
+        assertTrue(aResult);
         // if tag is not blank
-        Boolean bResult = configOperationService.deleteConfig("test", "test", "", "test", "1.1.1.1", "test");
-        verify(configInfoTagPersistService)
-                .removeConfigInfoTag(eq("test"), eq("test"), eq(""), eq("test"), any(), any());
-        Assert.assertEquals(true, bResult);
+        Boolean bResult = configOperationService.deleteConfig("test", "test", "", "test", "1.1.1.1", "test", "http");
+        assertTrue(bResult);
     }
 }

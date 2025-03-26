@@ -144,6 +144,11 @@ public class NacosException extends Exception {
     public static final int CONFLICT = 409;
     
     /**
+     * config already exists（配置已存在）.
+     */
+    public static final int CONFIG_ALREADY_EXISTS = 410;
+    
+    /**
      * server error（server异常，如超时）.
      */
     public static final int SERVER_ERROR = 500;
@@ -181,7 +186,7 @@ public class NacosException extends Exception {
     public static final int RESOURCE_NOT_FOUND = -404;
     
     /**
-     * http client error code, ome exceptions that occurred when the use the Nacos RestTemplate and Nacos
+     * http client error code, ome exceptions that occurred when there use the Nacos RestTemplate and Nacos
      * AsyncRestTemplate.
      */
     public static final int HTTP_CLIENT_ERROR_CODE = -500;

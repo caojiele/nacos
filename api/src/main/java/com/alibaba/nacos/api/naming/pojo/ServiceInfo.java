@@ -36,7 +36,7 @@ import java.util.List;
 public class ServiceInfo {
     
     /**
-     * file name pattern: groupName@@name@clusters.
+     * file name pattern: groupName@@name@@clusters.
      */
     private static final int GROUP_POSITION = 0;
     
@@ -83,7 +83,7 @@ public class ServiceInfo {
     }
     
     /**
-     * There is only one form of the key:groupName@@name@clusters. This constructor used by DiskCache.read(String) and
+     * There is only one form of the key:groupName@@name@@clusters. This constructor used by DiskCache.read(String) and
      * FailoverReactor.FailoverFileReader,you should know that 'groupName' must not be null,and 'clusters' can be null.
      */
     public ServiceInfo(final String key) {
@@ -188,18 +188,14 @@ public class ServiceInfo {
             return false;
         }
         
-        List<Instance> validHosts = new ArrayList<>();
+        boolean existValidHosts = false;
         for (Instance host : hosts) {
-            if (!host.isHealthy()) {
-                continue;
-            }
-            
-            for (int i = 0; i < host.getWeight(); i++) {
-                validHosts.add(host);
+            if (host.isHealthy() && host.getWeight() > 0) {
+                existValidHosts = true;
+                break;
             }
         }
-        //No valid hosts, return false.
-        return !validHosts.isEmpty();
+        return existValidHosts;
     }
     
     @JsonIgnore
@@ -219,14 +215,17 @@ public class ServiceInfo {
     
     @JsonIgnore
     public static String getKey(String name, String clusters) {
-        
         if (!isEmpty(clusters)) {
             return name + Constants.SERVICE_INFO_SPLITER + clusters;
         }
-        
         return name;
     }
-    
+
+    @JsonIgnore
+    public String getKeyWithoutClusters() {
+        return getGroupedServiceName();
+    }
+
     @JsonIgnore
     public String getKeyEncoded() {
         String serviceName = getGroupedServiceName();

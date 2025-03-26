@@ -21,22 +21,20 @@ import com.alibaba.nacos.api.config.remote.response.ConfigRemoveResponse;
 import com.alibaba.nacos.api.exception.NacosException;
 import com.alibaba.nacos.api.remote.request.RequestMeta;
 import com.alibaba.nacos.auth.annotation.Secured;
-import com.alibaba.nacos.common.utils.StringUtils;
-import com.alibaba.nacos.config.server.model.event.ConfigDataChangeEvent;
-import com.alibaba.nacos.config.server.service.ConfigChangePublisher;
+import com.alibaba.nacos.common.utils.NamespaceUtil;
+import com.alibaba.nacos.config.server.constant.Constants;
+import com.alibaba.nacos.config.server.service.ConfigOperationService;
+import com.alibaba.nacos.config.server.service.repository.ConfigInfoGrayPersistService;
 import com.alibaba.nacos.config.server.service.repository.ConfigInfoPersistService;
-import com.alibaba.nacos.config.server.service.repository.ConfigInfoTagPersistService;
-import com.alibaba.nacos.config.server.service.trace.ConfigTraceService;
 import com.alibaba.nacos.config.server.utils.ParamUtils;
-import com.alibaba.nacos.config.server.utils.TimeUtils;
-import com.alibaba.nacos.core.remote.RequestHandler;
 import com.alibaba.nacos.core.control.TpsControl;
+import com.alibaba.nacos.core.paramcheck.ExtractorManager;
+import com.alibaba.nacos.core.paramcheck.impl.ConfigRequestParamExtractor;
+import com.alibaba.nacos.core.remote.RequestHandler;
 import com.alibaba.nacos.core.utils.Loggers;
 import com.alibaba.nacos.plugin.auth.constant.ActionTypes;
 import com.alibaba.nacos.plugin.auth.constant.SignType;
 import org.springframework.stereotype.Component;
-
-import java.sql.Timestamp;
 
 /**
  * handler to remove config.
@@ -49,43 +47,36 @@ public class ConfigRemoveRequestHandler extends RequestHandler<ConfigRemoveReque
     
     private final ConfigInfoPersistService configInfoPersistService;
     
-    private final ConfigInfoTagPersistService configInfoTagPersistService;
+    private final ConfigInfoGrayPersistService configInfoGrayPersistService;
+    
+    private final ConfigOperationService configOperationService;
     
     public ConfigRemoveRequestHandler(ConfigInfoPersistService configInfoPersistService,
-            ConfigInfoTagPersistService configInfoTagPersistService) {
+            ConfigInfoGrayPersistService configInfoGrayPersistService, ConfigOperationService configOperationService) {
         this.configInfoPersistService = configInfoPersistService;
-        this.configInfoTagPersistService = configInfoTagPersistService;
+        this.configInfoGrayPersistService = configInfoGrayPersistService;
+        this.configOperationService = configOperationService;
     }
     
     @Override
     @TpsControl(pointName = "ConfigRemove")
     @Secured(action = ActionTypes.WRITE, signType = SignType.CONFIG)
+    @ExtractorManager.Extractor(rpcExtractor = ConfigRequestParamExtractor.class)
     public ConfigRemoveResponse handle(ConfigRemoveRequest configRemoveRequest, RequestMeta meta)
             throws NacosException {
         // check tenant
         String tenant = configRemoveRequest.getTenant();
+        tenant = NamespaceUtil.processNamespaceParameter(tenant);
         String dataId = configRemoveRequest.getDataId();
         String group = configRemoveRequest.getGroup();
         String tag = configRemoveRequest.getTag();
-        
         try {
             ParamUtils.checkTenant(tenant);
             ParamUtils.checkParam(dataId, group, "datumId", "rm");
             ParamUtils.checkParam(tag);
-            
             String clientIp = meta.getClientIp();
-            if (StringUtils.isBlank(tag)) {
-                configInfoPersistService.removeConfigInfo(dataId, group, tenant, clientIp, null);
-            } else {
-                configInfoTagPersistService.removeConfigInfoTag(dataId, group, tenant, tag, clientIp, null);
-            }
-            final Timestamp time = TimeUtils.getCurrentTime();
-            ConfigTraceService.logPersistenceEvent(dataId, group, tenant, null, time.getTime(), clientIp,
-                    ConfigTraceService.PERSISTENCE_EVENT_REMOVE, null);
-            ConfigChangePublisher
-                    .notifyConfigChange(new ConfigDataChangeEvent(false, dataId, group, tenant, tag, time.getTime()));
+            configOperationService.deleteConfig(dataId, group, tenant, tag, clientIp, null, Constants.RPC);
             return ConfigRemoveResponse.buildSuccessResponse();
-            
         } catch (Exception e) {
             Loggers.REMOTE_DIGEST.error("remove config error,error msg is {}", e.getMessage(), e);
             return ConfigRemoveResponse.buildFailResponse(e.getMessage());

@@ -104,17 +104,17 @@ public class HttpClientManager {
     }
     
     private static void shutdown() {
-        SRV_LOG.warn("[NamingServerHttpClientManager] Start destroying HTTP-Client");
+        SRV_LOG.info("[NamingServerHttpClientManager] Start destroying HTTP-Client");
         try {
-            HttpClientBeanHolder.shutdownNacostSyncRest(SYNC_HTTP_CLIENT_FACTORY.getClass().getName());
-            HttpClientBeanHolder.shutdownNacostSyncRest(APACHE_SYNC_HTTP_CLIENT_FACTORY.getClass().getName());
+            HttpClientBeanHolder.shutdownNacosSyncRest(SYNC_HTTP_CLIENT_FACTORY.getClass().getName());
+            HttpClientBeanHolder.shutdownNacosSyncRest(APACHE_SYNC_HTTP_CLIENT_FACTORY.getClass().getName());
             HttpClientBeanHolder.shutdownNacosAsyncRest(ASYNC_HTTP_CLIENT_FACTORY.getClass().getName());
             HttpClientBeanHolder.shutdownNacosAsyncRest(PROCESSOR_ASYNC_HTTP_CLIENT_FACTORY.getClass().getName());
         } catch (Exception ex) {
             SRV_LOG.error("[NamingServerHttpClientManager] An exception occurred when the HTTP client was closed : {}",
                     ExceptionUtil.getStackTrace(ex));
         }
-        SRV_LOG.warn("[NamingServerHttpClientManager] Destruction of the end");
+        SRV_LOG.info("[NamingServerHttpClientManager] Completed destruction of HTTP-Client");
     }
     
     private static class AsyncHttpClientFactory extends AbstractHttpClientFactory {

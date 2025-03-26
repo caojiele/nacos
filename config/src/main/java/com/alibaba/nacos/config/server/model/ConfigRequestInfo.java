@@ -30,14 +30,22 @@ public class ConfigRequestInfo implements Serializable {
     
     private String srcIp;
     
+    private String srcType;
+    
     private String requestIpApp;
     
     private String betaIps;
     
-    public ConfigRequestInfo(String srcIp, String requestIpApp, String betaIps) {
+    private String casMd5;
+    
+    private Boolean updateForExist = Boolean.TRUE;
+    
+    public ConfigRequestInfo(String srcIp, String srcType, String requestIpApp, String betaIps, String casMd5) {
         this.srcIp = srcIp;
+        this.srcType = srcType;
         this.requestIpApp = requestIpApp;
         this.betaIps = betaIps;
+        this.casMd5 = casMd5;
     }
     
     public ConfigRequestInfo() {
@@ -49,6 +57,14 @@ public class ConfigRequestInfo implements Serializable {
     
     public void setSrcIp(String srcIp) {
         this.srcIp = srcIp;
+    }
+    
+    public String getSrcType() {
+        return srcType;
+    }
+    
+    public void setSrcType(String srcType) {
+        this.srcType = srcType;
     }
     
     public String getRequestIpApp() {
@@ -67,6 +83,22 @@ public class ConfigRequestInfo implements Serializable {
         this.betaIps = betaIps;
     }
     
+    public String getCasMd5() {
+        return casMd5;
+    }
+    
+    public void setCasMd5(String casMd5) {
+        this.casMd5 = casMd5;
+    }
+    
+    public Boolean getUpdateForExist() {
+        return updateForExist;
+    }
+    
+    public void setUpdateForExist(Boolean updateForExist) {
+        this.updateForExist = updateForExist;
+    }
+    
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -76,18 +108,18 @@ public class ConfigRequestInfo implements Serializable {
             return false;
         }
         ConfigRequestInfo that = (ConfigRequestInfo) o;
-        return Objects.equals(srcIp, that.srcIp) && Objects.equals(requestIpApp, that.requestIpApp) && Objects
-                .equals(betaIps, that.betaIps);
+        return Objects.equals(srcIp, that.srcIp) && Objects.equals(requestIpApp, that.requestIpApp) && Objects.equals(
+                betaIps, that.betaIps) && Objects.equals(casMd5, that.casMd5) && Objects.equals(updateForExist, that.updateForExist);
     }
     
     @Override
     public int hashCode() {
-        return Objects.hash(srcIp, requestIpApp, betaIps);
+        return Objects.hash(srcIp, requestIpApp, betaIps, casMd5);
     }
     
     @Override
     public String toString() {
         return "ConfigRequestInfoVo{" + "srcIp='" + srcIp + '\'' + ", requestIpApp='" + requestIpApp + '\''
-                + ", betaIps='" + betaIps + '\'' + '}';
+                + ", betaIps='" + betaIps + '\'' + ", casMd5='" + casMd5 + '\'' + ", updateForExist='" + updateForExist + '}';
     }
 }

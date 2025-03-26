@@ -113,7 +113,6 @@ public class NotifyCenter {
         return INSTANCE.publisherMap;
     }
     
-    @JustForTest
     public static EventPublisher getPublisher(Class<? extends Event> topic) {
         if (ClassUtils.isAssignableFrom(SlowEvent.class, topic)) {
             return INSTANCE.sharePublisher;
@@ -121,7 +120,6 @@ public class NotifyCenter {
         return INSTANCE.publisherMap.get(topic.getCanonicalName());
     }
     
-    @JustForTest
     public static EventPublisher getSharePublisher() {
         return INSTANCE.sharePublisher;
     }
@@ -133,7 +131,7 @@ public class NotifyCenter {
         if (!CLOSED.compareAndSet(false, true)) {
             return;
         }
-        LOGGER.warn("[NotifyCenter] Start destroying Publisher");
+        LOGGER.info("[NotifyCenter] Start destroying Publisher");
         
         for (Map.Entry<String, EventPublisher> entry : INSTANCE.publisherMap.entrySet()) {
             try {
@@ -150,7 +148,7 @@ public class NotifyCenter {
             LOGGER.error("[SharePublisher] shutdown has error : ", e);
         }
         
-        LOGGER.warn("[NotifyCenter] Destruction of the end");
+        LOGGER.info("[NotifyCenter] Completed destruction of Publisher");
     }
     
     /**

@@ -99,7 +99,7 @@ public final class HttpClientBeanHolder {
         if (!ALREADY_SHUTDOWN.compareAndSet(false, true)) {
             return;
         }
-        LOGGER.warn("[HttpClientBeanHolder] Start destroying common HttpClient");
+        LOGGER.info("[HttpClientBeanHolder] Start destroying common HttpClient");
         
         try {
             shutdown(DefaultHttpClientFactory.class.getName());
@@ -108,7 +108,7 @@ public final class HttpClientBeanHolder {
                     ExceptionUtil.getStackTrace(ex));
         }
         
-        LOGGER.warn("[HttpClientBeanHolder] Destruction of the end");
+        LOGGER.info("[HttpClientBeanHolder] Completed destruction of HttpClient");
     }
     
     /**
@@ -118,7 +118,7 @@ public final class HttpClientBeanHolder {
      * @throws Exception ex
      */
     public static void shutdown(String className) throws Exception {
-        shutdownNacostSyncRest(className);
+        shutdownNacosSyncRest(className);
         shutdownNacosAsyncRest(className);
     }
     
@@ -128,7 +128,7 @@ public final class HttpClientBeanHolder {
      * @param className HttpClientFactory implement class name
      * @throws Exception ex
      */
-    public static void shutdownNacostSyncRest(String className) throws Exception {
+    public static void shutdownNacosSyncRest(String className) throws Exception {
         final NacosRestTemplate nacosRestTemplate = SINGLETON_REST.get(className);
         if (nacosRestTemplate != null) {
             nacosRestTemplate.close();
